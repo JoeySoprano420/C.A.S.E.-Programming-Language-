@@ -59,3 +59,9 @@ MSVC (link.exe)	nasm -f win64 compiler.asm -o compiler.objlink /SUBSYSTEM:CONSOL
 
 ⸻
 
+compile & run transpiler_structured
+
+nasm -f win64 transpiler_structured.asm -o transpiler.obj
+clang transpiler.obj -o transpiler.exe -Wl,/SUBSYSTEM:CONSOLE,/ENTRY:_start
+transpiler.exe
+
