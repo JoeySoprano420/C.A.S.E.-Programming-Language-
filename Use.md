@@ -27,9 +27,19 @@ clang transpiler.obj -o transpiler.exe -Wl,/SUBSYSTEM:CONSOLE,/ENTRY:_start
 
 If you’re inside Visual Studio Developer Command Prompt:
 
+assemble & link:
 nasm -f win64 compiler.asm -o compiler.obj
 link /SUBSYSTEM:CONSOLE /ENTRY:_start /OUT:compiler.exe compiler.obj
 compiler.exe
+
+run:
+transpiler.exe
+
+build:
+nasm -f win64 compiler.asm -o compiler.obj
+clang compiler.obj -o compiler.exe -Wl,/SUBSYSTEM:CONSOLE,/ENTRY:_start
+compiler.exe
+
 
 🧩 Breakdown
 	•	link.exe is Microsoft’s native linker.
