@@ -1,9 +1,0 @@
-Fn gen_ir ast (
-  if ast.type == PRINT {
-    emit_ir "syscall_write" ast.value
-  } else if ast.type == FUNCTION {
-    emit_ir "label" ast.name
-    loop node in ast.body { gen_ir node [end] }
-    emit_ir "ret"
-  } [end]
-) [end]
