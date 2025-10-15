@@ -1,0 +1,13 @@
+Fn add "int a, int b" (
+  let result = a + b
+  ret result
+) [end]
+
+Fn mainFunc () (
+  let x = 10
+  let y = 25
+  let z = call add [end]
+  Print "Sum is: " [end]
+) [end]
+
+call mainFunc [end]
