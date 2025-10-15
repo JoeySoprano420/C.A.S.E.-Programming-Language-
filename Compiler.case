@@ -2,3 +2,17 @@ Fn main () (
   Print "Welcome to C.A.S.E. Structured Phase" [end]
   ret 0
 ) [end]
+
+Fn main () (
+  Print "Hello from main!" [end]
+  if 1 {
+    Print "Condition true" [end]
+  } else {
+    Print "Condition false" [end]
+  } [end]
+  ret 0
+) [end]
+
+Fn secondary () (
+  Print "Inside secondary fn" [end]
+) [end]
