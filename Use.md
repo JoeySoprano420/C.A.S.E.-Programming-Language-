@@ -75,3 +75,9 @@ compiler.exe
 
 -----
 
+nasm -f win64 transpiler_conditional.asm -o transpiler.obj
+clang transpiler.obj -o transpiler.exe -Wl,/SUBSYSTEM:CONSOLE,/ENTRY:_start
+transpiler.exe
+
+-----
+
