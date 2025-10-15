@@ -1,8 +1,0 @@
-@overlay audit
-Fn mutate_self () (
-  let meta = read "compiler.meta"
-  if meta.has("CIAM") {
-    Print "Injecting macro overlay" [end]
-    call expand_macro meta["CIAM"] [end]
-  } [end]
-) [end]
