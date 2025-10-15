@@ -65,3 +65,13 @@ nasm -f win64 transpiler_structured.asm -o transpiler.obj
 clang transpiler.obj -o transpiler.exe -Wl,/SUBSYSTEM:CONSOLE,/ENTRY:_start
 transpiler.exe
 
+----- 
+
+assembling and running
+
+nasm -f win64 compiler.asm -o compiler.obj
+clang compiler.obj -o compiler.exe -Wl,/SUBSYSTEM:CONSOLE,/ENTRY:_start
+compiler.exe
+
+-----
+
