@@ -1,0 +1,3 @@
+Fn hello () (
+  Print "Hello from self-compiled CASE!" [end]
+) [end]
