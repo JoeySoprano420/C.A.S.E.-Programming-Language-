@@ -1,0 +1,13 @@
+Fn codegen ir_stream (
+  Print "section .text" [end]
+  loop "i = 0; i < len(ir_stream); i++" {
+    if ir_stream[i].opcode == "syscall_write" {
+      Print "  mov rax,1" [end]
+      Print "  mov rdi,1" [end]
+      Print "  lea rsi,[rel msg]" [end]
+      Print "  mov rdx,msglen" [end]
+      Print "  syscall" [end]
+    } [end]
+  } [end]
+  ret 0
+) [end]
