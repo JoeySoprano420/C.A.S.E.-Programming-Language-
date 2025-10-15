@@ -18,6 +18,9 @@ compiler.exe
 	•	/SUBSYSTEM:CONSOLE — ensures it opens a terminal console.
 	•	Output: compiler.exe
 
+nasm -f win64 transpiler.asm -o transpiler.obj
+clang transpiler.obj -o transpiler.exe -Wl,/SUBSYSTEM:CONSOLE,/ENTRY:_start
+
 ⸻
 
 🧱 Using Pure MSVC (Developer Command Prompt)
