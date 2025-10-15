@@ -1,0 +1,14 @@
+Fn parse tokens (
+  let node = new ASTNode()
+  loop "i = 0; i < len(tokens); i++" {
+    if tokens[i] == "Fn" {
+      node.type = FUNCTION
+      node.name = tokens[i+1]
+      node.body = parse_block(tokens, i+2)
+    } else if tokens[i] == "Print" {
+      node.type = PRINT
+      node.value = tokens[i+1]
+    }
+  } [end]
+  ret node
+) [end]
