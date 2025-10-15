@@ -1,0 +1,4 @@
+Fn main () (
+  Print "Welcome to C.A.S.E. Structured Phase" [end]
+  ret 0
+) [end]
