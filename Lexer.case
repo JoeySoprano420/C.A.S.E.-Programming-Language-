@@ -1,0 +1,14 @@
+Fn lex "source" (
+  loop "i = 0; i < len(source); i++" {
+    let ch = source[i]
+    if ch == '"' { emit TOKEN_STRING [end] }
+    else if ch == '(' { emit TOKEN_LPAREN [end] }
+    else if ch == ')' { emit TOKEN_RPAREN [end] }
+    else if ch == '{' { emit TOKEN_LBRACE [end] }
+    else if ch == '}' { emit TOKEN_RBRACE [end] }
+    else if ch == '+' { emit TOKEN_PLUS [end] }
+    else if ch == '-' { emit TOKEN_MINUS [end] }
+    else if is_digit(ch) { emit TOKEN_NUMBER [end] }
+  } [end]
+  ret tokens
+) [end]
