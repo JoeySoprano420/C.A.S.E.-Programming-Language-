@@ -9,7 +9,7 @@ C.A.S.E. is a **self-hosting, introspective programming language** that unites c
 It was designed to *compile itself, audit itself, and mutate itself* while maintaining human-readable, declarative syntax that maps deterministically to executable machine logic. 
 From bootstrap to full production, C.A.S.E. completes the sacred engineering loop: 
 ``` 
-transpiler.asm → compiler.case → compiler.asm → compiler.exe → (rebuild itself) 
+transpiler.CPP → compiler.case → compiler.CPP → compiler.exe → (rebuild itself) 
 ``` 
 --- 
 ## 🧩 1. The Language 
@@ -30,7 +30,7 @@ ret 0
 ``` 
 **Core Principles** 
 * **Declarative semantics** — minimal punctuation, natural order of thought. 
-* **Symbolic mapping** — every construct has a direct, visible translation to x86-64 assembly. 
+* **Symbolic mapping** — every construct has a direct, visible translation to Windows x86-64 C++. 
 * **Introspective execution** — functions, macros, and overlays can query and mutate the compiler state. 
 * **CIAM macros** — *Contextually Inferred Abstraction Macros* allow reusable code patterns with self-learning expansion. 
 --- 
@@ -42,15 +42,15 @@ ret 0
 | **2** | Parser | Builds abstract syntax trees (ASTs) with recursive descent. | 
 | **3** | Semantic Analyzer | Resolves types, scope, and symbolic overlays. | 
 | **4** | IR Generator | Converts AST to intermediate representation (IR). | 
-| **5** | Code Generator | Emits real Win64 Assembly via symbolic templates. | 
-| **6** | Assembler | Converts Assembly → object code (`.obj`). | 
+| **5** | Code Generator | Emits real Win64 CPP via templates. | 
+| **6** | COMPILER | Converts Assembly → object code (`.obj`). | 
 | **7** | Linker | Produces PE executables (`.exe`). | 
 | **8** | Auditor | Performs post-build mutation audit and replay tracking. | 
 --- 
 ### 🧱 Compilation Phases 
 | Phase | Purpose | Output | 
 | ----------- | --------------------------------------------------------- | --------------------------------------------------- | 
-| **Phase 1** | Bootstrap Transpiler in raw ASM | `transpiler.exe` | 
+| **Phase 1** | Bootstrap Transpiler in CPP | `transpiler.exe` | 
 | **Phase 2** | Author compiler in C.A.S.E. syntax | `compiler.case → compiler.asm → compiler.exe` | 
 | **Phase 3** | Self-host & evolve (compiler compiles itself) | `compiler.exe → compiler.exe` | 
 | **Phase 4** | Realize ecosystem with overlays, plug-ins, kernel hooks | `C.A.S.E. IDE`, `C.A.S.E. Shell`, `C.A.S.E. Kernel` | 
@@ -105,7 +105,7 @@ Once matured, C.A.S.E. evolves beyond a compiler into a full symbolic platform.
 | **C.A.S.E. IDE** | Visual workspace with hybrid disassembly view. | 
 | **C.A.S.E. Shell** | Macro-driven scripting environment (CIAM-aware). | 
 | **C.A.S.E. Kernel** | Bootable micro-environment that runs C.A.S.E. bytecode natively. | 
-| **C.A.S.E. Visualizer** | Interactive AST → IR → ASM tree renderer. | 
+| **C.A.S.E. Visualizer** | Interactive AST → IR → CPP tree renderer. | 
 | **C.A.S.E. Auditor** | Tracks self-mutation, overlays, and capability compliance. | 
 Together, they form a living ecosystem — compiler, assembler, auditor, and artist intertwined. 
 --- 
