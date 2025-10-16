@@ -227,3 +227,29 @@ compiler.exe → can compile new .case files
 | Arithmetic Expression    | `a + b * 2`              | `(a + b * 2)`            |
 | Function Call with Args  | `call name 5 10 [end]`   | `name(5, 10);`           |
 
+🧬 Summary
+| File           | Role                         | Output               |
+| -------------- | ---------------------------- | -------------------- |
+| `lexer.case`   | Converts characters → tokens | Token list           |
+| `parser.case`  | Converts tokens → AST        | Syntax tree          |
+| `emitter.case` | Converts AST → C++ code      | `compiler.cpp`       |
+| `main.case`    | Orchestrates pipeline        | Complete compilation |
+
+
+## -----
+
+🧠 How to Bootstrap This
+
+1 - Transpile using your C++ compiler (compiler.cpp)
+2 - Compile the generated .cpp files together (clang++ -std=c++17 intelligence.hpp compiler.cpp -o compiler.exe)
+3 - Run it (compiler.exe)
+
+This will output:
+
+=== C.A.S.E. Self-Hosting Compiler ===
+Loading source...
+Tokenizing...
+Parsing...
+Emitting C++...
+✅ Self-hosted C.A.S.E. compilation complete!
+
