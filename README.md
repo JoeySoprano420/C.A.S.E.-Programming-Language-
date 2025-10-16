@@ -1,3 +1,76 @@
+PLEASE READ *** THIS FIRST ***
+
+CURRENTLY SUPPORTED
+
+The C.A.S.E. compiler CURRENTLY supports a rich, domain-specific language designed for ceremony, introspection, and modular transformation. Here's a breakdown of its supported syntax, keywords, and symbols, based on the current compiler:
+
+🧠 Keywords (Control, Memory, I/O, Overlays, Systems)
+These are reserved words recognized by the lexer and parser:
+
+Control Flow
+Print, ret, loop, if, else, while, break, continue, switch, case, default
+Function & Call
+Fn, call
+Variable & Assignment
+let
+Overlay & Introspection
+overlay, mutate, scale, bounds, checkpoint, vbreak
+File I/O
+open, write, writeln, read, close
+Concurrency & Scheduling
+channel, send, recv, sync, schedule
+🧾 Token Types
+The lexer recognizes:
+
+Identifiers: variable/function names (e.g., myVar, main)
+Strings: double-quoted, with escapes (\n, \t, \", etc.)
+Numbers: integers, decimals, scientific notation (e.g., 42, 3.14, 1e-5)
+Symbols: single-character operators and delimiters
+🔣 Supported Symbols
+These are valid single-character tokens:
+
+( ) { } [ ] = ; , + - * / < > ! & | % : .
+Used for:
+
+Arithmetic: +, -, *, /
+Comparison: <, >, <=, >=, ==, !=
+Grouping: (), {}, []
+Assignment: =
+Separators: ,, ;
+Logical: !, &, |
+Others: %, :, .
+🧱 Expression Grammar
+Expressions support:
+
+Literals: numbers, strings, identifiers
+Binary operations: +, -, *, /, comparisons
+Parentheses for grouping
+Basic precedence and associativity
+🧰 Statement Types
+Each keyword maps to a specific AST node:
+
+Print "text" → emits std::cout << "text"
+let x = 5 → declares a variable
+Fn name () { ... } → defines a function
+call name → invokes a function
+loop "int i=0; i<N; i++" → emits a for loop
+scale x a b c d → remaps x from [a,b] to [c,d]
+bounds x min max → clamps x to [min,max]
+checkpoint label, vbreak label → emit labels and gotos
+channel ch "int" → declares a typed channel
+send ch expr, recv ch var → channel communication
+schedule 10 { ... } → priority-based task scheduling
+sync → OpenMP barrier (if available)
+🧩 Overlays & Plugins
+The compiler supports overlays like:
+
+overlay mutate, inspect, replay → enables CIAM hooks
+mutate foo → triggers plugin-based mutation
+These activate introspection, symbolic replay, and plugin transforms
+
+
+## ----- ##
+
 # C.A.S.E.-Programming-Language-
 
 --- 
