@@ -165,4 +165,65 @@ bootstrap transpiler → compiler.Cpp
 compiler.exe → can compile new .case files
 
 -----
+🧠 Step-By-Step Explanation
+| Keyword                                       | Role           | Description                                                               |
+| --------------------------------------------- | -------------- | ------------------------------------------------------------------------- |
+| `Fn demo () (...) [end]`                      | Function       | Defines a block of logic called `demo`.                                   |
+| `loop "int i = 1; i <= 5; i++" { ... } [end]` | For-loop       | Iterates 5 times using standard C++ syntax inside the string literal.     |
+| `if i == 3 { ... } else { ... } [end]`        | Conditional    | Demonstrates C.A.S.E. branching (prints a special message when `i == 3`). |
+| `Print "..." [end]`                           | Console output | Maps to `std::cout << ...`.                                               |
+| `call demo [end]`                             | Invocation     | Executes the `demo()` function.                                           |
+
+🧬 Summary of C.A.S.E. Constructs Demonstrated
+| Construct | Symbolic Form                        | Resulting C++ Behavior                |
+| --------- | ------------------------------------ | ------------------------------------- |
+| Function  | `Fn name () (...) [end]`             | Defines reusable logic.               |
+| Print     | `Print "..." [end]`                  | Writes to `std::cout`.                |
+| Loop      | `loop "for(...) {...}" [end]`        | Emits a native `for` loop.            |
+| If/Else   | `if cond { ... } else { ... } [end]` | Emits `if(...) { ... } else { ... }`. |
+| Call      | `call name [end]`                    | Invokes the function.                 |
+
+🧠 Step-by-Step Explanation
+| Keyword          | Purpose              | What it Does                                    |
+| ---------------- | -------------------- | ----------------------------------------------- |
+| `let var = expr` | Variable declaration | Creates a variable just like `auto var = expr;` |
+| `ret value`      | Return value         | Exits the function returning `value`.           |
+| `call add [end]` | Function call        | Invokes the `add()` function defined above.     |
+| `Print`          | Console output       | Displays text in the terminal.                  |
+
+🧩 Concepts Illustrated
+| Concept              | C.A.S.E. Form            | C++ Equivalent     |
+| -------------------- | ------------------------ | ------------------ |
+| Variable Declaration | `let x = 10`             | `auto x = 10;`     |
+| Arithmetic           | `a + b`                  | `a + b`            |
+| Return Statement     | `ret value`              | `return value;`    |
+| Function Call        | `call add [end]`         | `add();`           |
+| Output               | `Print "Sum is: " [end]` | `std::cout << ...` |
+
+🧠 Step-by-Step Explanation
+| Keyword                                 | Purpose                             | Description                                               |
+| --------------------------------------- | ----------------------------------- | --------------------------------------------------------- |
+| `Fn compare "int a, int b" (...) [end]` | Function definition with parameters | Declares a comparison function that accepts two integers. |
+| `if a > b { ... } else { ... } [end]`   | Branching logic                     | Prints and returns depending on which number is greater.  |
+| `ret a` / `ret b`                       | Returns the chosen number           | Equivalent to `return a;` in C++.                         |
+| `let larger = call compare [end]`       | Invocation                          | Calls the function and stores its result.                 |
+| `Print`                                 | Console output                      | Outputs descriptive text.                                 |
+
+🧬 Concepts Illustrated
+| Concept            | C.A.S.E. Syntax         | C++ Equivalent             |
+| ------------------ | ----------------------- | -------------------------- |
+| Conditional Branch | `if ... else ... [end]` | `if(...) {...} else {...}` |
+| Return             | `ret value`             | `return value;`            |
+| Variables          | `let x = ...`           | `auto x = ...;`            |
+| Function Call      | `call name [end]`       | `name();`                  |
+| Printing           | `Print "..." [end]`     | `std::cout << ...`         |
+
+🧬 C.A.S.E. Language Milestone Summary
+| Feature                  | Syntax                   | C++ Equivalent           |
+| ------------------------ | ------------------------ | ------------------------ |
+| Function with Parameters | `Fn name "int a, int b"` | `int name(int a, int b)` |
+| Variable                 | `let x = expr`           | `auto x = expr;`         |
+| Return Value             | `ret expr`               | `return expr;`           |
+| Arithmetic Expression    | `a + b * 2`              | `(a + b * 2)`            |
+| Function Call with Args  | `call name 5 10 [end]`   | `name(5, 10);`           |
 
