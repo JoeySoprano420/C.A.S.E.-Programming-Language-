@@ -978,19 +978,35 @@ Fallback logic: If CIAM detects a broken ritual (e.g. unmatched [end]), it can p
 🔥 Example
 Without CIAM:
 
-case
+case:
+
+
 Fn greet "name" {
+
   Print "Hello, name
+  
 [end]
+
+
+
 → Lexer throws: Unterminated string literal at line 2
+
+
 
 With CIAM:
 
-case
+case:
+
+
 call CIAM[on]
+
 Fn greet "name" {
+
   Print "Hello, name"
+  
 [end]
+
+
 → CIAM patches the string or flags it, allowing the compiler to proceed or give a clearer error.
 
 ## -----
