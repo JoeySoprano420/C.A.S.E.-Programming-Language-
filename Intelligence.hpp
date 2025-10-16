@@ -7,7 +7,11 @@ namespace ciam {
 // If the DSL contains `call CIAM[on]`, it will:
 // - repair ambiguous constructs (e.g., Print with no arg),
 // - auto-alias near-miss function calls,
-// - abstract repeated Print literals into generated Fn macros.
+// - abstract repeated Print literals into generated Fn macros,
+// - CIAM write_stdout macros: `CIAM write_stdout { ... }` -> Print "...",
+// - Plugin overlays and symbolic introspection: `CIAM overlay[Name]`, `CIAM inspect[Fns|symbols|overlays]`,
+// - Self-mutation sandbox and capability audit: `CIAM sandbox { ... }`, `CIAM audit[]`,
+// - Base-12 numerics (0–9, a, b) for integer literals starting with a digit.
 //
 // If CIAM is not enabled inline, Process returns the input unchanged.
 class Preprocessor {
@@ -217,6 +221,57 @@ namespace ciam {
             return prev[m];
         }
 
+        static std::string toLower(std::string s) {
+            for (auto& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            return s;
+        }
+
+        static size_t findMatchingBrace(const std::vector<Tok>& ts, size_t openIdx) {
+            if (openIdx >= ts.size() || !eqSym(ts[openIdx], '{')) return ts.size();
+            int depth = 0;
+            for (size_t i = openIdx; i < ts.size(); ++i) {
+                if (eqSym(ts[i], '{')) ++depth;
+                else if (eqSym(ts[i], '}')) {
+                    --depth;
+                    if (depth == 0) return i;
+                }
+            }
+            return ts.size();
+        }
+
+        static bool isBase12Word(const std::string& w) {
+            if (w.empty()) return false;
+            if (!std::isdigit(static_cast<unsigned char>(w[0]))) return false; // must start with digit
+            bool ok = true, hasAB = false;
+            for (char c : w) {
+                if (c >= '0' && c <= '9') continue;
+                char lc = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                if (lc == 'a' || lc == 'b') { hasAB = true; continue; }
+                ok = false; break;
+            }
+            return ok && hasAB; // only convert if it actually uses a/b
+        }
+
+        static bool base12ToDecimal(const std::string& w, std::string& out) {
+            unsigned long long val = 0;
+            for (char c : w) {
+                int d;
+                if (c >= '0' && c <= '9') d = c - '0';
+                else {
+                    char lc = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                    if (lc == 'a') d = 10;
+                    else if (lc == 'b') d = 11;
+                    else return false;
+                }
+                if (val > (std::numeric_limits<unsigned long long>::max)() / 12ULL) return false;
+                val *= 12ULL;
+                if (val > (std::numeric_limits<unsigned long long>::max)() - static_cast<unsigned long long>(d)) return false;
+                val += static_cast<unsigned long long>(d);
+            }
+            out = std::to_string(val);
+            return true;
+        }
+
         struct PrintOccur {
             size_t idxPrint;   // index of 'Print'
             size_t idxString;  // index of string token if present, else (size_t)-1
@@ -293,7 +348,178 @@ namespace ciam {
             i = nameIdx;
         }
 
-        // 4) Scan occurrences of Print and call; collect stats and last seen string
+        // --- New features ---
+        // Overlay registry (names declared via CIAM overlay[Name])
+        std::unordered_set<std::string> overlaysActive;
+        int sandboxCounter = 1;
+
+        // 4) Pre-transform CIAM commands:
+        // - CIAM write_stdout { ... }   => Print "..." (content is textual concat of block)
+        // - CIAM overlay[Name]          => line comment annotation (and record overlay)
+        // - CIAM inspect[Fns|symbols|overlays] => Print "info..."
+        // - CIAM sandbox { ... }        => Fn _CIAM_sandbox_N { ... } \n call _CIAM_sandbox_N[]
+        // - CIAM audit[]                => Print "capabilities..."
+        for (size_t i = 0; i < toks.size(); ++i) {
+            size_t a = nextNonWs(toks, i);
+            if (a >= toks.size() || !eqWord(toks[a], "CIAM")) continue;
+            size_t cmd = nextNonWs(toks, a + 1);
+            if (cmd >= toks.size() || toks[cmd].kind != K::Word) continue;
+            const std::string cmdName = toLower(toks[cmd].text);
+
+            if (cmdName == "write_stdout") {
+                size_t open = nextNonWs(toks, cmd + 1);
+                if (open >= toks.size() || !eqSym(toks[open], '{')) continue;
+                size_t close = findMatchingBrace(toks, open);
+                if (close == toks.size()) continue;
+
+                // Build body text (use unquoted content for strings, keep whitespace/symbols as-is)
+                std::string body;
+                for (size_t k = open + 1; k < close; ++k) {
+                    const auto& tk = toks[k];
+                    if (tk.kind == K::String) body += tk.text;
+                    else body += tk.text;
+                }
+
+                // Replace [a..close] with: Print "body"
+                eraseRange(toks, a, close + 1);
+                size_t ins = a;
+                toks.insert(toks.begin() + static_cast<std::ptrdiff_t>(ins++), Tok{ K::Word, "Print" });
+                toks.insert(toks.begin() + static_cast<std::ptrdiff_t>(ins++), Tok{ K::Whitespace, " " });
+                toks.insert(toks.begin() + static_cast<std::ptrdiff_t>(ins++), Tok{ K::String, body });
+                i = ins;
+                continue;
+            }
+
+            if (cmdName == "overlay") {
+                size_t lbr = nextNonWs(toks, cmd + 1);
+                if (lbr >= toks.size() || !eqSym(toks[lbr], '[')) continue;
+                size_t nameIdx = nextNonWs(toks, lbr + 1);
+                size_t rbr = nextNonWs(toks, nameIdx + 1);
+                if (nameIdx >= toks.size() || toks[nameIdx].kind != K::Word) continue;
+                if (rbr >= toks.size() || !eqSym(toks[rbr], ']')) continue;
+
+                overlaysActive.insert(toks[nameIdx].text);
+                // Replace with a comment line (no-op for the DSL)
+                eraseRange(toks, a, rbr + 1);
+                toks.insert(toks.begin() + static_cast<std::ptrdiff_t>(a), Tok{ K::Whitespace, "// CIAM overlay: " + toks[nameIdx].text + "\n" });
+                i = a;
+                continue;
+            }
+
+            if (cmdName == "inspect") {
+                size_t lbr = nextNonWs(toks, cmd + 1);
+                if (lbr >= toks.size() || !eqSym(toks[lbr], '[')) continue;
+                size_t arg = nextNonWs(toks, lbr + 1);
+                size_t rbr = nextNonWs(toks, arg + 1);
+                if (arg >= toks.size() || toks[arg].kind != K::Word) continue;
+                if (rbr >= toks.size() || !eqSym(toks[rbr], ']')) continue;
+
+                std::string what = toLower(toks[arg].text);
+                std::string info;
+                if (what == "fns" || what == "funcs" || what == "functions") {
+                    info = "Fns: ";
+                    bool first = true;
+                    for (const auto& fn : fnNames) {
+                        if (!first) info += ", ";
+                        first = false;
+                        info += fn;
+                    }
+                    if (first) info += "(none)";
+                } else if (what == "symbols") {
+                    info = "Symbols: fns=" + std::to_string(fnNames.size());
+                } else if (what == "overlays") {
+                    info = "Overlays: ";
+                    bool first = true;
+                    for (const auto& ov : overlaysActive) {
+                        if (!first) info += ", ";
+                        first = false;
+                        info += ov;
+                    }
+                    if (first) info += "(none)";
+                } else {
+                    info = "Unknown inspect target: " + toks[arg].text;
+                }
+
+                eraseRange(toks, a, rbr + 1);
+                size_t ins = a;
+                toks.insert(toks.begin() + static_cast<std::ptrdiff_t>(ins++), Tok{ K::Word, "Print" });
+                toks.insert(toks.begin() + static_cast<std::ptrdiff_t>(ins++), Tok{ K::Whitespace, " " });
+                toks.insert(toks.begin() + static_cast<std::ptrdiff_t>(ins++), Tok{ K::String, info });
+                i = ins;
+                continue;
+            }
+
+            if (cmdName == "sandbox") {
+                size_t open = nextNonWs(toks, cmd + 1);
+                if (open >= toks.size() || !eqSym(toks[open], '{')) continue;
+                size_t close = findMatchingBrace(toks, open);
+                if (close == toks.size()) continue;
+
+                std::string name = "_CIAM_sandbox_" + std::to_string(sandboxCounter++);
+
+                // Replace with: Fn <name> { <body> } \n call <name> []
+                std::vector<Tok> rep;
+                rep.push_back(Tok{ K::Word, "Fn" });
+                rep.push_back(Tok{ K::Whitespace, " " });
+                rep.push_back(Tok{ K::Word, name });
+                rep.push_back(Tok{ K::Whitespace, " " });
+                rep.push_back(Tok{ K::Symbol, "{" });
+                // body tokens
+                for (size_t k = open + 1; k < close; ++k) rep.push_back(toks[k]);
+                rep.push_back(Tok{ K::Symbol, "}" });
+                rep.push_back(Tok{ K::Whitespace, "\n" });
+                rep.push_back(Tok{ K::Word, "call" });
+                rep.push_back(Tok{ K::Whitespace, " " });
+                rep.push_back(Tok{ K::Word, name });
+                rep.push_back(Tok{ K::Whitespace, " " });
+                rep.push_back(Tok{ K::Symbol, "[" });
+                rep.push_back(Tok{ K::Symbol, "]" });
+
+                eraseRange(toks, a, close + 1);
+                toks.insert(toks.begin() + static_cast<std::ptrdiff_t>(a), rep.begin(), rep.end());
+                i = a + rep.size();
+                continue;
+            }
+
+            if (cmdName == "audit") {
+                // Build capability report
+                std::string info = "CIAM capabilities: typo_correction, print_inference, macro_abstraction, write_stdout, inspect, overlay, sandbox, base12";
+                if (!fnNames.empty()) info += " | fns=" + std::to_string(fnNames.size());
+                if (!overlaysActive.empty()) {
+                    info += " | overlays=";
+                    bool first = true;
+                    for (const auto& ov : overlaysActive) {
+                        if (!first) info += ",";
+                        first = false;
+                        info += ov;
+                    }
+                }
+                eraseRange(toks, a, a + 2); // at least "CIAM audit"; allow missing [] to be optional
+                // If next tokens are [ ], remove them too
+                size_t lbr = nextNonWs(toks, a);
+                if (lbr < toks.size() && eqSym(toks[lbr], '[')) {
+                    size_t rbr = nextNonWs(toks, lbr + 1);
+                    if (rbr < toks.size() && eqSym(toks[rbr], ']')) eraseRange(toks, lbr, rbr + 1);
+                }
+                toks.insert(toks.begin() + static_cast<std::ptrdiff_t>(a), Tok{ K::Word, "Print" });
+                toks.insert(toks.begin() + static_cast<std::ptrdiff_t>(a + 1), Tok{ K::Whitespace, " " });
+                toks.insert(toks.begin() + static_cast<std::ptrdiff_t>(a + 2), Tok{ K::String, info });
+                i = a + 3;
+                continue;
+            }
+        }
+
+        // 5) Base-12 numerics: convert tokens like [0-9aAbB]+ (starting with digit, containing a/b) to decimal
+        for (auto& tk : toks) {
+            if (tk.kind == K::Word && isBase12Word(tk.text)) {
+                std::string dec;
+                if (base12ToDecimal(tk.text, dec)) {
+                    tk.text = dec; // Will be lexed as NUMBER by the downstream tokenizer
+                }
+            }
+        }
+
+        // 6) Scan occurrences of Print and call; collect stats and last seen string
         std::unordered_map<std::string, int> printFreq;
         std::vector<PrintOccur> printOccs;
         std::vector<CallOccur> callOccs;
@@ -320,7 +546,7 @@ namespace ciam {
             }
         }
 
-        // 5) Fix ambiguous Print with no argument by inferring content
+        // 7) Fix ambiguous Print with no argument by inferring content
         for (auto& po : printOccs) {
             if (po.idxString != static_cast<size_t>(-1)) continue;
             const std::string inferred = !lastString.empty()
@@ -336,7 +562,7 @@ namespace ciam {
             printFreq[inferred] += 1;
         }
 
-        // 6) Build macros for repeated Print literals (frequency >= 2)
+        // 8) Build macros for repeated Print literals (frequency >= 2)
         struct MacroInfo { std::string name; std::string literal; };
         std::vector<MacroInfo> macros;
         int macroCounter = 1;
@@ -349,7 +575,7 @@ namespace ciam {
             }
         }
 
-        // 7) Replace repeated Prints with call MacroName[]
+        // 9) Replace repeated Prints with call MacroName[] and inject macro Fns
         if (!macros.empty()) {
             std::unordered_map<std::string, std::string> lit2macro;
             for (const auto& m : macros) lit2macro[m.literal] = m.name;
@@ -405,7 +631,7 @@ namespace ciam {
             toks.insert(toks.begin() + static_cast<std::ptrdiff_t>(head), defs.begin(), defs.end());
         }
 
-        // 8) Correct near-miss call targets using learned Fn names (edit distance ≤ 2)
+        // 10) Correct near-miss call targets using learned Fn names (edit distance ≤ 2)
         if (!fnNames.empty()) {
             for (const auto& co : callOccs) {
                 if (co.idxName >= toks.size() || toks[co.idxName].kind != K::Word) continue;
