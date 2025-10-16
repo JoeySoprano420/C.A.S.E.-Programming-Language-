@@ -1,0 +1,32 @@
+# ----------------------------------------------------------
+#  EQUATION MODULE — quadratic solver ax² + bx + c = 0
+# ----------------------------------------------------------
+
+@type float
+
+Fn solveQuadratic "double a, double b, double c" (
+  Print "📐  Solving quadratic equation..." [end]
+
+  let discriminant = (b * b) - (4 * a * c)
+  Print "Discriminant (b² - 4ac) = " [end]
+
+  if discriminant > 0 {
+    let root1 = (-b + sqrt(discriminant)) / (2 * a)
+    let root2 = (-b - sqrt(discriminant)) / (2 * a)
+    Print "Two distinct real roots:" [end]
+    Print "x₁ = " [end]
+    Print "x₂ = " [end]
+  } else if discriminant == 0 {
+    let root = (-b) / (2 * a)
+    Print "One repeated real root:" [end]
+    Print "x = " [end]
+  } else {
+    let realPart = (-b) / (2 * a)
+    let imagPart = sqrt(-discriminant) / (2 * a)
+    Print "Complex conjugate roots:" [end]
+    Print "x₁ = " [end]
+    Print "x₂ = " [end]
+  } [end]
+
+  Print "Equation solved." [end]
+) [end]
