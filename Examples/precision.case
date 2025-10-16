@@ -1,0 +1,44 @@
+# ----------------------------------------------------------
+#  PRECISION MODULE — numeric representation overlays
+# ----------------------------------------------------------
+
+@overlay base12
+Fn toBase12 "int value" (
+  let symbols = "0123456789ab"
+  let out = ""
+  let n = value
+  if n == 0 { ret "0" }
+  while n > 0 {
+    let digit = n % 12
+    out = substring symbols digit (digit+1) + out
+    n = n / 12
+  } [end]
+  ret out
+) [end]
+
+@overlay scientific
+Fn toScientific "double value" (
+  let exp = 0
+  let num = value
+  while num >= 10 {
+    num = num / 10
+    exp = exp + 1
+  } [end]
+  while num < 1 && num > 0 {
+    num = num * 10
+    exp = exp - 1
+  } [end]
+  Print "Scientific Notation: " [end]
+  Print num [end]
+  Print " ×10^" [end]
+  Print exp [end]
+) [end]
+
+Fn demoPrecision () (
+  Print "🔢  Demonstrating precision overlays..." [end]
+  Print "Base-12 representation of 144:" [end]
+  let b12 = call toBase12 144 [end]
+  Print "Scientific representation of 12345.678:" [end]
+  call toScientific 12345.678 [end]
+  Print "Precision demo complete." [end]
+) [end]
