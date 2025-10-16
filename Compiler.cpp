@@ -1,4 +1,4 @@
-// Compiler.cpp - Single translation unit for a tiny DSL -> C++ transpiler (C++14)
+// Compiler.cpp - Single translation unit for a CASE Programming Language -> C++ transpiler (C++14)
 
 #include <cctype>
 #include <fstream>
@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include "intelligence.hpp" // CIAM preprocessor (write_stdout, overlays/inspect, sandbox/audit, base-12)
 
 // ------------------------ Lexer ------------------------
 
@@ -201,6 +202,7 @@ static bool matchValue(const std::string& v) {
 }
 
 static Node* parseStatement(); // fwd
+static Node* parseExpression(); // fwd
 
 static void skipBracketBlockIfPresent() {
     if (matchValue("[")) {
@@ -244,9 +246,11 @@ static Node* parsePrint() {
 static Node* parseRet() {
     advanceTok(); // consume 'ret'
     Node* n = new Node{"Ret", ""};
-    if (peek().type != TokenType::END && peek().type != TokenType::SYMBOL && !checkValue("[")) {
-        n->value = advanceTok().value;
+    if (peek().type != TokenType::END && !checkValue("[") && !checkValue("}")) {
+        Node* expr = parseExpression();
+        if (expr) n->children.push_back(expr);
     }
+    skipBracketBlockIfPresent();
     return n;
 }
 
@@ -265,19 +269,15 @@ static Node* parseLet() {
     Node* n = new Node{"Let", ""};
     if (peek().type == TokenType::IDENT) {
         n->value = advanceTok().value; // variable name
+    } else {
+        throw std::runtime_error("Expected identifier after 'let' at line " + std::to_string(peek().line));
     }
     if (!matchValue("=")) {
         throw std::runtime_error("Expected '=' in let statement at line " + std::to_string(peek().line));
     }
-    if (peek().type == TokenType::NUMBER) {
-        n->children.push_back(new Node{"ExprNum", advanceTok().value});
-    } else if (peek().type == TokenType::STRING) {
-        n->children.push_back(new Node{"ExprStr", advanceTok().value});
-    } else if (peek().type == TokenType::IDENT) {
-        n->children.push_back(new Node{"ExprIdent", advanceTok().value});
-    } else {
-        throw std::runtime_error("Invalid expression in let statement at line " + std::to_string(peek().line));
-    }
+    Node* expr = parseExpression();
+    if (!expr) throw std::runtime_error("Invalid expression in let at line " + std::to_string(peek().line));
+    n->children.push_back(expr);
     return n;
 }
 
@@ -327,6 +327,60 @@ static Node* parseFn() {
     return n;
 }
 
+// ----- Expression parsing (precedence: * / > + -) -----
+
+static int precedenceOf(const std::string& op) {
+    if (op == "*" || op == "/") return 20;
+    if (op == "+" || op == "-") return 10;
+    return -1;
+}
+
+static Node* parsePrimary() {
+    if (peek().type == TokenType::NUMBER) {
+        return new Node{"Num", advanceTok().value};
+    }
+    if (peek().type == TokenType::STRING) {
+        return new Node{"Str", advanceTok().value};
+    }
+    if (peek().type == TokenType::IDENT) {
+        return new Node{"Var", advanceTok().value};
+    }
+    if (checkValue("(")) {
+        advanceTok(); // (
+        Node* inner = parseExpression();
+        if (!matchValue(")")) throw std::runtime_error("Expected ')' in expression at line " + std::to_string(peek().line));
+        return inner;
+    }
+    throw std::runtime_error("Expected expression at line " + std::to_string(peek().line));
+}
+
+static Node* parseBinOpRHS(int minPrec, Node* lhs) {
+    while (true) {
+        const Token& t = peek();
+        if (t.type != TokenType::SYMBOL) return lhs;
+        std::string op = t.value;
+        int prec = precedenceOf(op);
+        if (prec < minPrec) return lhs;
+
+        advanceTok(); // consume operator
+        Node* rhs = parsePrimary();
+        int nextPrec = precedenceOf(peek().value);
+        if (nextPrec > prec) {
+            rhs = parseBinOpRHS(prec + 1, rhs);
+        }
+
+        Node* bin = new Node{"BinOp", op};
+        bin->children.push_back(lhs);
+        bin->children.push_back(rhs);
+        lhs = bin;
+    }
+}
+
+static Node* parseExpression() {
+    Node* lhs = parsePrimary();
+    return parseBinOpRHS(0, lhs);
+}
+
 static Node* parseStatement() {
     const std::string v = peek().value;
     if (v == "Print") return parsePrint();
@@ -368,6 +422,27 @@ static std::string escapeCppString(const std::string& s) {
         }
     }
     return out;
+}
+
+static std::string emitExpr(Node* e);
+
+static std::string emitExpr(Node* e) {
+    if (!e) return "0";
+    if (e->type == "Num") return e->value;
+    if (e->type == "Var") return e->value;
+    if (e->type == "Str") {
+        return std::string("\"") + escapeCppString(e->value) + "\"";
+    }
+    if (e->type == "BinOp") {
+        std::string lhs = emitExpr(e->children.size() > 0 ? e->children[0] : nullptr);
+        std::string rhs = emitExpr(e->children.size() > 1 ? e->children[1] : nullptr);
+        return "(" + lhs + " " + e->value + " " + rhs + ")";
+    }
+    // Legacy nodes support
+    if (e->type == "ExprNum") return e->value;
+    if (e->type == "ExprIdent") return e->value;
+    if (e->type == "ExprStr") return std::string("\"") + escapeCppString(e->value) + "\"";
+    return "/*expr*/0";
 }
 
 static void emitNode(Node* n, std::ostringstream& out);
@@ -419,19 +494,12 @@ static void emitNode(Node* n, std::ostringstream& out) {
         if (n->children.empty()) {
             out << "/* invalid let */\n";
         } else {
-            Node* expr = n->children[0];
-            out << "auto " << n->value << " = ";
-            if (expr->type == "ExprStr") {
-                out << "\"" << escapeCppString(expr->value) << "\"";
-            } else {
-                out << expr->value;
-            }
-            out << ";\n";
+            out << "auto " << n->value << " = " << emitExpr(n->children[0]) << ";\n";
         }
     }
     else if (n->type == "Ret") {
-        if (n->value.empty()) out << "return;\n";
-        else out << "return " << n->value << ";\n";
+        if (n->children.empty()) out << "return;\n";
+        else out << "return " << emitExpr(n->children[0]) << ";\n";
     }
     else {
         out << "/* Unknown: " << n->type << " " << n->value << " */\n";
@@ -459,6 +527,10 @@ int main(int argc, char** argv) {
     std::string src((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
 
     try {
+        // Preprocess with CIAM features (enabled only when source contains: call CIAM[on])
+        ciam::Preprocessor ciamPre;
+        src = ciamPre.Process(src);
+
         auto tokens = tokenize(src);
         Node* ast = parseProgram(tokens);
         std::string cpp = emitCPP(ast);
