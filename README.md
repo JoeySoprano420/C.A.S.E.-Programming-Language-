@@ -68,7 +68,7 @@ overlay mutate, inspect, replay → enables CIAM hooks
 mutate foo → triggers plugin-based mutation
 These activate introspection, symbolic replay, and plugin transforms
 
-
+THE REST IS IN DEVELOPMENT AND THEREFORE, NOT GUARENTEED TO WORK YET/HAS NOT BEEN VETTED
 ## ----- ##
 
 # C.A.S.E.-Programming-Language-
