@@ -1,0 +1,65 @@
+Fn emitExpr "Node n" (
+  if n.type == "Term" {
+    Print n.value [end]
+  } else if n.type == "Expr" {
+    Print "(" [end]
+    call emitExpr n.children[0] [end]
+    Print " " + n.value + " " [end]
+    call emitExpr n.children[1] [end]
+    Print ")" [end]
+  }
+) [end]
+
+Fn emitNode "Node n" (
+  if n.type == "Program" {
+    Print "#include <iostream>" [end]
+    loop "child in n.children" {
+      if child.type == "Fn" { call emitNode child [end] }
+    } [end]
+    Print "int main(){" [end]
+    loop "child in n.children" {
+      if child.type != "Fn" { call emitNode child [end] }
+    } [end]
+    Print "return 0;}" [end]
+  } else if n.type == "Print" {
+    Print "std::cout << \"" + n.value + "\" << std::endl;" [end]
+  } else if n.type == "Loop" {
+    Print "for(" + n.value + "){" [end]
+    loop "c in n.children" { call emitNode c [end] } [end]
+    Print "}" [end]
+  } else if n.type == "If" {
+    Print "if(" + n.value + "){" [end]
+    loop "c in n.children[0].children" { call emitNode c [end] } [end]
+    Print "}" [end]
+    if n.children.size() > 1 {
+      Print "else{" [end]
+      loop "c in n.children[1].children" { call emitNode c [end] } [end]
+      Print "}" [end]
+    }
+  } else if n.type == "Fn" {
+    Print "void " + n.value + "(){" [end]
+    loop "c in n.children[0].children" { call emitNode c [end] } [end]
+    Print "}" [end]
+  } else if n.type == "Call" {
+    Print n.value + "(" [end]
+    loop "arg in n.children" {
+      Print arg.value [end]
+      Print ", " [end]
+    } [end]
+    Print ");" [end]
+  } else if n.type == "Let" {
+    Print "auto " + n.value + " = " [end]
+    call emitExpr n.children[0] [end]
+    Print ";" [end]
+  } else if n.type == "Ret" {
+    Print "return " [end]
+    call emitExpr n.children[0] [end]
+    Print ";" [end]
+  }
+) [end]
+
+Fn emitCPP "Node root" (
+  Print "Emitting C++ code..." [end]
+  call emitNode root [end]
+  Print "C++ emission complete." [end]
+) [end]
