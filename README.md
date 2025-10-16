@@ -253,3 +253,182 @@ Parsing...
 Emitting C++...
 ✅ Self-hosted C.A.S.E. compilation complete!
 
+## -----
+
+Here’s the **complete reference C.A.S.E. demo suite** rewritten in full **Phase 2.5 syntax** — the point at which the language supports function arguments, arithmetic expressions, conditional branching, and return values.
+
+Each `.case` file below can be dropped directly into your project and run through the **Phase 2.5 transpiler** you just built.
+They demonstrate the key constructs of the living language: declaration, arithmetic, branching, iteration, and output.
+
+---
+
+## 🟦 `hello.case`
+
+### ✨ Concept: basic output and function invocation
+
+```plaintext
+Print "Hello from Windows C.A.S.E." [end]
+
+Fn hello () (
+  Print "Hello from self-compiled C.A.S.E.!" [end]
+) [end]
+
+call hello [end]
+```
+
+**Expected console output**
+
+```
+Hello from Windows C.A.S.E.
+Hello from self-compiled C.A.S.E.!
+```
+
+---
+
+## 🟨 `math.case`
+
+### 🧮 Concept: variables, arithmetic expressions, function calls, and return
+
+```plaintext
+Fn add "int a, int b" (
+  let result = a + b
+  ret result
+) [end]
+
+Fn multiply "int a, int b" (
+  let result = a * b
+  ret result
+) [end]
+
+Fn demoMath () (
+  Print "Performing math operations..." [end]
+
+  let sum = call add 12 8 [end]
+  let product = call multiply 6 7 [end]
+
+  Print "Sum = " [end]
+  Print "Product = " [end]
+  Print "Math complete." [end]
+) [end]
+
+call demoMath [end]
+```
+
+**Generated C++ outline**
+
+```cpp
+int add(int a,int b){auto result=(a+b);return result;}
+int multiply(int a,int b){auto result=(a*b);return result;}
+void demoMath(){
+std::cout<<"Performing math operations..."<<std::endl;
+auto sum=add(12,8);
+auto product=multiply(6,7);
+std::cout<<"Sum = "<<std::endl;
+std::cout<<"Product = "<<std::endl;
+std::cout<<"Math complete."<<std::endl;
+}
+int main(){demoMath();return 0;}
+```
+
+**Expected console output**
+
+```
+Performing math operations...
+Sum = 
+Product = 
+Math complete.
+```
+
+*(future enhancement will embed variable printing)*
+
+---
+
+## 🟩 `compare.case`
+
+### ⚖️ Concept: conditionals, return values, and logical flow
+
+```plaintext
+Fn compare "int a, int b" (
+  if a > b {
+    Print "A is greater" [end]
+    ret a
+  } else {
+    Print "B is greater or equal" [end]
+    ret b
+  } [end]
+) [end]
+
+Fn mainFunc () (
+  let x = 42
+  let y = 56
+  Print "Comparing values..." [end]
+  let larger = call compare x y [end]
+  Print "Done comparing." [end]
+) [end]
+
+call mainFunc [end]
+```
+
+**Expected console output**
+
+```
+Comparing values...
+B is greater or equal
+Done comparing.
+```
+
+---
+
+## 🟥 `loop.case`
+
+### 🔁 Concept: loops combined with conditionals
+
+```plaintext
+Fn demoLoop () (
+  Print "Starting demo loop..." [end]
+
+  loop "int i = 1; i <= 5; i++" {
+    if i == 3 {
+      Print "Reached three!" [end]
+    } else {
+      Print "Counting..." [end]
+    } [end]
+  } [end]
+
+  Print "Demo complete." [end]
+) [end]
+
+call demoLoop [end]
+```
+
+**Expected console output**
+
+```
+Starting demo loop...
+Counting...
+Counting...
+Reached three!
+Counting...
+Counting...
+Demo complete.
+```
+
+---
+
+## 🧠 Language Features Covered
+
+| Construct                          | C.A.S.E. form | Purpose                    |
+| ---------------------------------- | ------------- | -------------------------- |
+| `Print "text" [end]`               | Output        | Writes to console          |
+| `Fn name "params"`                 | Function      | Defines a callable routine |
+| `call name args [end]`             | Invocation    | Executes another function  |
+| `let x = expr`                     | Variable      | Declares & assigns         |
+| `ret expr`                         | Return        | Ends function with value   |
+| `if … else … [end]`                | Branch        | Conditional control        |
+| `loop "for-header" { … } [end]`    | Iteration     | Repetition structure       |
+| Expressions (`a + b`, `(x*y) + 2`) | Arithmetic    | Fully transpiled to C++    |
+
+---
+
+## -----
+
