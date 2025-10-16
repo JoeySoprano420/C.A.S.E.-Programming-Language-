@@ -761,3 +761,14 @@ Final Output Logging
 Logs paths to the LLVM IR and native binary.
 
 Confirms successful build via Clang/LLVM.
+
+## -----
+
+•	Added loop parallel/vectorization/unroll hints via header markers:
+•	Use in CASE: loop "@omp @vectorize @unroll(4) int i=0; i<N; i++" { ... } [end]
+•	Emits guarded pragmas: OpenMP parallel-for, Clang/GCC/MSVC vector/unroll hints.
+•	Wired optimize(ast) before emission. Notes
+•	Tail-call, PGO, packetization, and register allocation are delegated to the native compiler; enable C/C++ > Optimization and OpenMP Support in Visual Studio, or pass -O3 -march=native -fopenmp in external toolchains for auto-vectorization and multithreading.
+
+## -----
+
