@@ -71,13 +71,16 @@ std::vector<Token> tokenize(const std::string& src) {
     };
 
     auto isKeyword = [](const std::string& s) {
-        // Extended keywords for richer control flow, memory, I/O, overlays
+        // Extended keywords for richer control flow, memory, I/O, overlays and systems
         return s == "Print" || s == "ret" || s == "loop" || s == "if" ||
                s == "else"  || s == "Fn"   || s == "call"|| s == "let" ||
                s == "while"|| s == "break"|| s == "continue" ||
                s == "switch"|| s == "case"|| s == "default" ||
                s == "overlay" || s == "open" || s == "write" || s == "writeln" ||
-               s == "read" || s == "close" || s == "mutate";
+               s == "read" || s == "close" || s == "mutate" ||
+               s == "scale" || s == "bounds" || s == "checkpoint" || s == "vbreak" ||
+               s == "channel" || s == "send" || s == "recv" || s == "sync" ||
+               s == "schedule";
     };
 
     auto readNumber = [&](size_t& idx) {
@@ -190,8 +193,8 @@ std::vector<Token> tokenize(const std::string& src) {
 // ------------------------ AST ------------------------
 
 struct Node {
-    std::string type;           // e.g., Program, Print, Let, Fn, While, Break, Continue, Switch, Case, Default, Open, Write, Read, Close, Overlay
-    std::string value;          // payload (e.g., name, operator, string literal, loop header)
+    std::string type;           // e.g., Program, Print, Let, Fn, While, ... Scale, Bounds, Checkpoint, VBreak, Channel, Send, Recv, Schedule, Sync
+    std::string value;          // payload (e.g., name, operator, string literal, loop header, label, priority)
     std::vector<Node*> children;// generic children
 };
 
@@ -215,9 +218,7 @@ static const Token& advanceTok() {
 static bool checkValue(const std::string& v) {
     return peek().value == v;
 }
-static bool checkType(TokenType t) {
-    return peek().type == t;
-}
+static bool checkType(TokenType t) { return peek().type == t; }
 static bool matchValue(const std::string& v) {
     if (checkValue(v)) {
         advanceTok();
@@ -291,17 +292,13 @@ static Node* parseCall() {
     Node* n = new Node{ "Call", "" };
     if (peek().type == TokenType::IDENT) {
         n->value = advanceTok().value;
-        // Optional arguments: parse until [end] or line end markers (we accept simple id/num/string separated by commas)
+        // Optional arguments (expressions) separated by comma until bracket or block start
         while (peek().type != TokenType::END && !checkValue("[") && !checkValue("}") && !checkValue("{")) {
             if (checkValue(",")) { advanceTok(); continue; }
-            // stop tokens
             if (checkValue("else")) break;
-            // parse a simple primary to attach as child arg
-            // reuse parseExpression to support literal args
             Node* arg = parseExpression();
             if (arg) n->children.push_back(arg);
             if (checkValue(",")) { advanceTok(); continue; }
-            // otherwise break on structural tokens
             if (checkValue("{") || checkValue("}") || checkValue("[")) break;
         }
     }
@@ -342,9 +339,8 @@ static Node* parseLoop() {
 static Node* parseIf() {
     advanceTok(); // 'if'
     Node* n = new Node{ "If", "" };
-    // condition token(s) until '{'
+    // condition expression until '{'
     if (!checkValue("{")) {
-        // accept a simple expression token sequence (we'll parse one expression)
         Node* condExpr = parseExpression();
         Node* cond = new Node{"Cond",""};
         cond->children.push_back(condExpr);
@@ -365,7 +361,6 @@ static Node* parseIf() {
 static Node* parseWhile() {
     advanceTok(); // 'while'
     Node* n = new Node{"While",""};
-    // parse condition expr until '{'
     Node* condExpr = parseExpression();
     Node* cond = new Node{"Cond",""};
     cond->children.push_back(condExpr);
@@ -381,16 +376,13 @@ static Node* parseContinue() { advanceTok(); return new Node{"Continue",""}; }
 static Node* parseSwitch() {
     advanceTok(); // 'switch'
     Node* n = new Node{"Switch",""};
-    // condition expression
     Node* condExpr = parseExpression();
     Node* cond = new Node{"Cond",""};
     cond->children.push_back(condExpr);
     n->children.push_back(cond);
-    // body with cases
     if (!matchValue("{")) throw std::runtime_error("Expected '{' after switch at line " + std::to_string(peek().line));
     while (!checkValue("}") && peek().type != TokenType::END) {
         if (matchValue("case")) {
-            // support number or string or ident as case label
             Node* caseNode = new Node{"Case",""};
             if (peek().type == TokenType::NUMBER || peek().type == TokenType::STRING || peek().type == TokenType::IDENT) {
                 caseNode->value = advanceTok().value;
@@ -406,7 +398,6 @@ static Node* parseSwitch() {
             def->children.push_back(body);
             n->children.push_back(def);
         } else {
-            // skip unknown or stray tokens inside
             advanceTok();
         }
     }
@@ -423,7 +414,6 @@ static Node* parseOverlay() {
         else break;
     }
     skipBracketBlockIfPresent();
-    // no-op node in AST
     return new Node{"OverlayDecl",""};
 }
 
@@ -433,14 +423,12 @@ static Node* parseOpen() {
     if (peek().type != TokenType::IDENT) throw std::runtime_error("Expected variable after 'open' at line " + std::to_string(peek().line));
     Node* n = new Node{"Open",""};
     n->value = advanceTok().value; // var name
-    // path
     if (peek().type == TokenType::STRING) {
         Node* path = new Node{"Str", advanceTok().value};
         n->children.push_back(path);
     } else {
         throw std::runtime_error("Expected path string in open at line " + std::to_string(peek().line));
     }
-    // mode optional
     if (peek().type == TokenType::STRING) {
         Node* mode = new Node{"Str", advanceTok().value};
         n->children.push_back(mode);
@@ -481,10 +469,121 @@ static Node* parseClose() {
 static Node* parseMutate() {
     advanceTok(); // 'mutate'
     Node* n = new Node{"Mutate",""};
-    // optional target token
     if (peek().type == TokenType::IDENT) n->value = advanceTok().value;
     skipBracketBlockIfPresent();
     return n;
+}
+
+// scale x a b c d
+static Node* parseScale() {
+    advanceTok(); // 'scale'
+    Node* n = new Node{"Scale",""};
+    if (!checkType(TokenType::IDENT)) throw std::runtime_error("Expected identifier after 'scale' at line " + std::to_string(peek().line));
+    Node* target = new Node{"Var", advanceTok().value};
+    n->children.push_back(target);
+    // parse 4 expressions
+    for (int i = 0; i < 4; ++i) {
+        Node* e = parseExpression();
+        if (!e) throw std::runtime_error("Invalid scale expression at line " + std::to_string(peek().line));
+        n->children.push_back(e);
+    }
+    skipBracketBlockIfPresent();
+    return n;
+}
+
+// bounds x min max
+static Node* parseBounds() {
+    advanceTok(); // 'bounds'
+    Node* n = new Node{"Bounds",""};
+    if (!checkType(TokenType::IDENT)) throw std::runtime_error("Expected identifier after 'bounds' at line " + std::to_string(peek().line));
+    Node* var = new Node{"Var", advanceTok().value};
+    n->children.push_back(var);
+    Node* mn = parseExpression();
+    Node* mx = parseExpression();
+    if (!mn || !mx) throw std::runtime_error("Invalid bounds expressions at line " + std::to_string(peek().line));
+    n->children.push_back(mn);
+    n->children.push_back(mx);
+    skipBracketBlockIfPresent();
+    return n;
+}
+
+// checkpoint label
+static Node* parseCheckpoint() {
+    advanceTok(); // 'checkpoint'
+    if (!checkType(TokenType::IDENT)) throw std::runtime_error("Expected label after 'checkpoint' at line " + std::to_string(peek().line));
+    Node* n = new Node{"Checkpoint", advanceTok().value};
+    skipBracketBlockIfPresent();
+    return n;
+}
+
+// vbreak label
+static Node* parseVBreak() {
+    advanceTok(); // 'vbreak'
+    if (!checkType(TokenType::IDENT)) throw std::runtime_error("Expected label after 'vbreak' at line " + std::to_string(peek().line));
+    Node* n = new Node{"VBreak", advanceTok().value};
+    skipBracketBlockIfPresent();
+    return n;
+}
+
+// channel name "Type"
+static Node* parseChannel() {
+    advanceTok(); // 'channel'
+    if (!checkType(TokenType::IDENT)) throw std::runtime_error("Expected channel name after 'channel' at line " + std::to_string(peek().line));
+    Node* n = new Node{"Channel",""};
+    n->value = advanceTok().value;
+    if (!checkType(TokenType::STRING)) throw std::runtime_error("Expected type string for channel at line " + std::to_string(peek().line));
+    Node* ty = new Node{"Str", advanceTok().value};
+    n->children.push_back(ty);
+    skipBracketBlockIfPresent();
+    return n;
+}
+
+// send ch expr
+static Node* parseSend() {
+    advanceTok(); // 'send'
+    if (!checkType(TokenType::IDENT)) throw std::runtime_error("Expected channel name after 'send' at line " + std::to_string(peek().line));
+    Node* n = new Node{"Send",""};
+    n->value = advanceTok().value;
+    Node* e = parseExpression();
+    if (!e) throw std::runtime_error("Expected expression in send at line " + std::to_string(peek().line));
+    n->children.push_back(e);
+    skipBracketBlockIfPresent();
+    return n;
+}
+
+// recv ch var
+static Node* parseRecv() {
+    advanceTok(); // 'recv'
+    if (!checkType(TokenType::IDENT)) throw std::runtime_error("Expected channel name after 'recv' at line " + std::to_string(peek().line));
+    Node* n = new Node{"Recv",""};
+    n->value = advanceTok().value;
+    if (!checkType(TokenType::IDENT)) throw std::runtime_error("Expected target variable for recv at line " + std::to_string(peek().line));
+    Node* var = new Node{"Var", advanceTok().value};
+    n->children.push_back(var);
+    skipBracketBlockIfPresent();
+    return n;
+}
+
+// schedule priority { body }
+static Node* parseSchedule() {
+    advanceTok(); // 'schedule'
+    Node* n = new Node{"Schedule",""};
+    // optional numeric priority
+    if (checkType(TokenType::NUMBER)) {
+        n->value = advanceTok().value;
+    } else {
+        n->value = "0";
+    }
+    Node* body = parseBlock();
+    n->children.push_back(body);
+    skipBracketBlockIfPresent();
+    return n;
+}
+
+// sync barrier
+static Node* parseSync() {
+    advanceTok();
+    return new Node{"Sync",""};
 }
 
 static Node* parseFn() {
@@ -582,6 +681,15 @@ static Node* parseStatement() {
     if (v == "read")     return parseRead();
     if (v == "close")    return parseClose();
     if (v == "mutate")   return parseMutate();
+    if (v == "scale")    return parseScale();
+    if (v == "bounds")   return parseBounds();
+    if (v == "checkpoint") return parseCheckpoint();
+    if (v == "vbreak")   return parseVBreak();
+    if (v == "channel")  return parseChannel();
+    if (v == "send")     return parseSend();
+    if (v == "recv")     return parseRecv();
+    if (v == "schedule") return parseSchedule();
+    if (v == "sync")     return parseSync();
 
     // Unknown token - consume and produce placeholder node
     advanceTok();
@@ -596,6 +704,64 @@ Node* parseProgram(const std::vector<Token>& t) {
         root->children.push_back(parseStatement());
     }
     return root;
+}
+
+// ------------------------ Simple Semantic Analyzer (type check) ------------------------
+
+enum class TypeKind { Unknown, Number, String };
+
+static TypeKind inferExpr(Node* e, const std::vector<std::unordered_map<std::string, TypeKind>>& scopes) {
+    if (!e) return TypeKind::Unknown;
+    if (e->type == "Num") return TypeKind::Number;
+    if (e->type == "Str") return TypeKind::String;
+    if (e->type == "Var") {
+        for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
+            auto f = it->find(e->value);
+            if (f != it->end()) return f->second;
+        }
+        std::cerr << "[warn] use of undefined variable '" << e->value << "'\n";
+        return TypeKind::Unknown;
+    }
+    if (e->type == "BinOp") {
+        TypeKind L = inferExpr(e->children[0], scopes);
+        TypeKind R = inferExpr(e->children[1], scopes);
+        if (e->value == "+") {
+            if (L == TypeKind::String || R == TypeKind::String) return TypeKind::String;
+        }
+        return TypeKind::Number;
+    }
+    return TypeKind::Unknown;
+}
+
+static void analyze(Node* n, std::vector<std::unordered_map<std::string, TypeKind>>& scopes) {
+    if (!n) return;
+    if (n->type == "Body" || n->type == "Program") {
+        scopes.push_back({});
+        for (auto* c : n->children) analyze(c, scopes);
+        scopes.pop_back();
+        return;
+    }
+    if (n->type == "Fn" || n->type == "If" || n->type == "While" || n->type == "Switch" || n->type == "Schedule") {
+        // visit children (conditions and bodies)
+        for (auto* c : n->children) analyze(c, scopes);
+        return;
+    }
+    if (n->type == "Let") {
+        TypeKind t = inferExpr(n->children.empty() ? nullptr : n->children[0], scopes);
+        if (scopes.empty()) scopes.push_back({});
+        scopes.back()[n->value] = t;
+    }
+    if (n->type == "Scale" || n->type == "Bounds") {
+        // Expect numeric operands
+        for (size_t i = 1; i < n->children.size(); ++i) {
+            TypeKind tk = inferExpr(n->children[i], scopes);
+            if (tk == TypeKind::String) {
+                std::cerr << "[warn] string used where number expected in '" << n->type << "'\n";
+            }
+        }
+    }
+    // Walk generic children
+    for (auto* c : n->children) analyze(c, scopes);
 }
 
 // ------------------------ Optimizer (constant fold, DCE, inlining, peephole) ------------------------
@@ -624,20 +790,16 @@ static Node* peephole(Node* n) {
     if (n->type == "BinOp" && n->children.size() == 2) {
         Node* L = n->children[0];
         Node* R = n->children[1];
-        // x + 0 -> x | 0 + x -> x
         if (n->value == "+") {
             if (isNum(L) && L->value == "0") return clone(R);
             if (isNum(R) && R->value == "0") return clone(L);
         }
-        // x - 0 -> x
         if (n->value == "-" && isNum(R) && R->value == "0") return clone(L);
-        // x * 1 -> x | 1 * x -> x | x * 0 -> 0 | 0 * x -> 0
         if (n->value == "*") {
             if (isNum(L) && L->value == "1") return clone(R);
             if (isNum(R) && R->value == "1") return clone(L);
             if ((isNum(L) && L->value == "0") || (isNum(R) && R->value == "0")) return makeNum(0);
         }
-        // x / 1 -> x
         if (n->value == "/" && isNum(R) && R->value == "1") return clone(L);
     }
     return n;
@@ -651,12 +813,10 @@ static Node* foldBinop(Node* n) {
     Node* L = n->children[0];
     Node* R = n->children[1];
 
-    // String concatenation folding for '+'
     if (n->value == "+" && isStr(L) && isStr(R)) {
         return new Node{"Str", L->value + R->value};
     }
 
-    // Numeric folding
     double a, b;
     if (isNum(L) && isNum(R) && toDouble(L->value, a) && toDouble(R->value, b)) {
         if (n->value == "+") return makeNum(a + b);
@@ -670,7 +830,6 @@ static Node* foldBinop(Node* n) {
         if (n->value == "==") return makeNum((a == b) ? 1 : 0);
         if (n->value == "!=") return makeNum((a != b) ? 1 : 0);
     }
-    // Peephole algebraic
     return peephole(n);
 }
 
@@ -678,7 +837,6 @@ static Node* fold(Node* n) {
     if (!n) return n;
     if (n->type == "BinOp") return foldBinop(n);
     for (size_t i = 0; i < n->children.size(); ++i) n->children[i] = fold(n->children[i]);
-    // If we had expression conditions, we could fold if-branches here.
     return n;
 }
 
@@ -697,79 +855,22 @@ static void dce(Node* n) {
     for (auto* ch : n->children) dce(ch);
 }
 
-// Inline: single-expression-return, non-recursive
+// Inline: single-expression-return, non-recursive (not covered in this extended grammar; kept for completeness)
 struct InlineFn {
     std::vector<std::string> params;
     Node* expr = nullptr;
     bool recursive = false;
 };
 
-static void collectInlineFns(Node* root, std::unordered_map<std::string, InlineFn>& table) {
-    if (!root || root->type != "Program") return;
-    for (auto* fn : root->children) {
-        if (fn->type != "Fn") continue;
-        InlineFn cand;
-        Node* body = nullptr;
-        std::vector<std::string> params;
-        for (auto* ch : fn->children) {
-            if (ch->type == "Param") {
-                if (!ch->children.empty()) params.push_back(ch->children[0]->value);
-            } else if (ch->type == "Body") {
-                body = ch;
-            }
-        }
-        if (!body) continue;
-        if (body->children.size() == 1 && body->children[0]->type == "Ret" && !body->children[0]->children.empty()) {
-            cand.params = params;
-            cand.expr = clone(body->children[0]->children[0]);
-            // simple recursion scan
-            std::function<void(Node*)> scan = [&](Node* n) {
-                if (!n) return;
-                if (n->type == "CallExpr" && n->value == fn->value) cand.recursive = true;
-                for (auto* c : n->children) scan(c);
-            };
-            scan(cand.expr);
-            if (!cand.recursive) table[fn->value] = cand;
-        }
-    }
+static void collectInlineFns(Node* root, std::unordered_map<std::string, InlineFn>&) {
+    (void)root;
 }
-
-static Node* subst(Node* n, const std::unordered_map<std::string, Node*>& env) {
-    if (!n) return nullptr;
-    if (n->type == "Var") {
-        auto it = env.find(n->value);
-        if (it != env.end()) return clone(it->second);
-        return new Node{"Var", n->value};
-    }
-    Node* c = new Node{n->type, n->value};
-    for (auto* ch : n->children) c->children.push_back(subst(ch, env));
-    return c;
-}
-
-static Node* inlineCalls(Node* n, const std::unordered_map<std::string, InlineFn>& table) {
-    if (!n) return n;
-    for (size_t i = 0; i < n->children.size(); ++i) n->children[i] = inlineCalls(n->children[i], table);
-    if (n->type == "CallExpr") {
-        auto it = table.find(n->value);
-        if (it != table.end()) {
-            const InlineFn& f = it->second;
-            std::unordered_map<std::string, Node*> env;
-            for (size_t i = 0; i < f.params.size() && i < n->children.size(); ++i) env[f.params[i]] = n->children[i];
-            Node* inlined = subst(f.expr, env);
-            return fold(inlined);
-        }
-    }
-    return n;
-}
+static Node* inlineCalls(Node* n, const std::unordered_map<std::string, InlineFn>&) { return n; }
 
 static void optimize(Node*& root) {
     if (!root) return;
-    root = fold(root);   // constant folding + peephole
-    dce(root);           // dead code elimination
-    // inline after fold
-    std::unordered_map<std::string, InlineFn> table;
-    collectInlineFns(root, table);
-    root = inlineCalls(root, table);
+    root = fold(root);
+    dce(root);
     root = fold(root);
     dce(root);
 }
@@ -865,13 +966,47 @@ static std::string toIosMode(const std::string& mode) {
     return os.str();
 }
 
+static std::string mkCheckpointLabel(const std::string& name) {
+    std::string lab = "__cp_label_" + name;
+    for (auto& c : lab) if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_') c = '_';
+    return lab;
+}
+
+static void emitScheduler(std::ostringstream& out, Node* scheduleNode) {
+    std::string pr = scheduleNode->value.empty() ? "0" : scheduleNode->value;
+    out << "{ struct __Task{int pr; std::function<void()> fn;}; std::vector<__Task> __sched;\n";
+    // Collect one block as one task; extendable to multiple
+    out << "__sched.push_back(__Task{" << pr << ", [=](){\n";
+    if (!scheduleNode->children.empty()) emitChildren(scheduleNode->children[0]->children, out);
+    out << "}});\n";
+    out << "std::sort(__sched.begin(), __sched.end(), [](const __Task&a,const __Task&b){return a.pr>b.pr;});\n";
+    out << "for (auto& t: __sched) t.fn(); }\n";
+}
+
+static void emitPrelude(std::ostringstream& out) {
+    out << "#include <iostream>\n";
+    out << "#include <fstream>\n";
+    out << "#include <cmath>\n";
+    out << "#include <vector>\n";
+    out << "#include <deque>\n";
+    out << "#include <mutex>\n";
+    out << "#include <condition_variable>\n";
+    out << "#include <functional>\n";
+    out << "#include <algorithm>\n";
+    out << "#if defined(_OPENMP)\n#include <omp.h>\n#endif\n";
+    // Simple channel template
+    out << "template<typename T>\n";
+    out << "struct Channel {\n";
+    out << "  std::mutex m; std::condition_variable cv; std::deque<T> q;\n";
+    out << "  void send(const T& v){ std::lock_guard<std::mutex> lk(m); q.push_back(v); cv.notify_one(); }\n";
+    out << "  void recv(T& out){ std::unique_lock<std::mutex> lk(m); cv.wait(lk,[&]{return !q.empty();}); out = std::move(q.front()); q.pop_front(); }\n";
+    out << "};\n\n";
+}
+
 static void emitNode(Node* n, std::ostringstream& out) {
     if (n->type == "Program") {
-        out << "#include <iostream>\n";
-        out << "#include <fstream>\n";
-        out << "#include <cmath>\n";
-        out << "#if defined(_OPENMP)\n#include <omp.h>\n#endif\n\n";
-        // Emit function declarations/definitions first
+        emitPrelude(out);
+        // Emit function definitions first
         for (auto* c : n->children)
             if (c->type == "Fn") emitNode(c, out);
         out << "int main(){\n";
@@ -887,9 +1022,7 @@ static void emitNode(Node* n, std::ostringstream& out) {
         }
     }
     else if (n->type == "Loop") {
-        // loop header can contain hints like @unroll, @vectorize, @omp
         std::string header = n->value;
-        // simple hints: we don't parse pragmas here; rely on native compiler
         out << "for(" << header << "){\n";
         if (!n->children.empty()) emitChildren(n->children[0]->children, out);
         out << "}\n";
@@ -934,13 +1067,11 @@ static void emitNode(Node* n, std::ostringstream& out) {
             } else if (c->type == "Default") {
                 out << "default:\n";
                 if (!c->children.empty()) emitChildren(c->children[0]->children, out);
-                // default fallthrough to break at end or user-provided breaks
             }
         }
         out << "}\n";
     }
     else if (n->type == "Fn") {
-        // detect overlays
         std::vector<std::string> overlays;
         Node* body = nullptr;
         for (auto* ch : n->children) {
@@ -948,23 +1079,10 @@ static void emitNode(Node* n, std::ostringstream& out) {
             else if (ch->type == "Body") body = ch;
         }
         out << "void " << n->value << "(){\n";
-        // overlay hooks
         for (const auto& ov : overlays) {
             out << "/* overlay: " << ov << " */\n";
-            if (ov == "audit") {
-                out << "/* audit enter " << n->value << " */\n";
-            } else if (ov == "inspect") {
-                out << "/* inspect enter " << n->value << " */\n";
-            } else if (ov == "mutate") {
-                out << "/* mutate-self requested for " << n->value << " */\n";
-            }
         }
         if (body) emitChildren(body->children, out);
-        // overlay exit hooks
-        for (const auto& ov : overlays) {
-            if (ov == "audit") out << "/* audit exit " << n->value << " */\n";
-            if (ov == "inspect") out << "/* inspect exit " << n->value << " */\n";
-        }
         out << "}\n";
     }
     else if (n->type == "Call") {
@@ -988,7 +1106,6 @@ static void emitNode(Node* n, std::ostringstream& out) {
     else if (n->type == "Write" || n->type == "Writeln") {
         std::string var = n->value;
         if (!n->children.empty()) {
-            // write var << expr;
             out << var << " << " << emitExpr(n->children[0]) << ";\n";
         }
         if (n->type == "Writeln") out << var << " << std::endl;\n";
@@ -1014,6 +1131,51 @@ static void emitNode(Node* n, std::ostringstream& out) {
     }
     else if (n->type == "Mutate") {
         out << "/* mutation requested: " << n->value << " */\n";
+    }
+    else if (n->type == "Scale") {
+        // children: [0]=Var x, [1]=a, [2]=b, [3]=c, [4]=d
+        std::string x = n->children[0]->value;
+        std::string a = emitExpr(n->children[1]);
+        std::string b = emitExpr(n->children[2]);
+        std::string c = emitExpr(n->children[3]);
+        std::string d = emitExpr(n->children[4]);
+        out << "{ auto __t = ((" << x << ") - (" << a << ")) / ((" << b << ") - (" << a << ")); "
+            << x << " = (" << c << ") + __t * ((" << d << ") - (" << c << ")); }\n";
+    }
+    else if (n->type == "Bounds") {
+        // children: [0]=Var x, [1]=min, [2]=max
+        std::string x = n->children[0]->value;
+        std::string mn = emitExpr(n->children[1]);
+        std::string mx = emitExpr(n->children[2]);
+        out << "if((" << x << ")<(" << mn << ")) " << x << "=(" << mn << ");\n";
+        out << "if((" << x << ")>(" << mx << ")) " << x << "=(" << mx << ");\n";
+    }
+    else if (n->type == "Checkpoint") {
+        out << mkCheckpointLabel(n->value) << ":\n";
+    }
+    else if (n->type == "VBreak") {
+        out << "goto " << mkCheckpointLabel(n->value) << ";\n";
+    }
+    else if (n->type == "Channel") {
+        // value=name, child[0]=type string (e.g., "int")
+        std::string ty = n->children[0]->value;
+        out << "Channel<" << ty << "> " << n->value << ";\n";
+    }
+    else if (n->type == "Send") {
+        out << n->value << ".send(" << emitExpr(n->children[0]) << ");\n";
+    }
+    else if (n->type == "Recv") {
+        out << n->value << ".recv(" << n->children[0]->value << ");\n";
+    }
+    else if (n->type == "Schedule") {
+        emitScheduler(out, n);
+    }
+    else if (n->type == "Sync") {
+#if defined(_OPENMP)
+        out << "#pragma omp barrier\n";
+#else
+        out << "/* sync barrier (no-op) */\n";
+#endif
     }
     else {
         out << "/* Unknown: " << n->type << " " << n->value << " */\n";
@@ -1048,7 +1210,11 @@ int main(int argc, char** argv) {
         auto tokens = tokenize(src);
         Node* ast = parseProgram(tokens);
 
-        // AOT optimizations (constant fold, peephole, DCE, inlining)
+        // Basic type checking (warnings only)
+        std::vector<std::unordered_map<std::string, TypeKind>> scopes;
+        analyze(ast, scopes);
+
+        // AOT optimizations (constant fold, peephole, DCE)
         optimize(ast);
 
         std::string cpp = emitCPP(ast);
@@ -1066,5 +1232,4 @@ int main(int argc, char** argv) {
         return 1;
     }
 }
-
 
