@@ -432,3 +432,15 @@ Demo complete.
 
 ## -----
 
+🧠 Language Features Covered
+| Construct                          | C.A.S.E. form | Purpose                    |
+| ---------------------------------- | ------------- | -------------------------- |
+| `Print "text" [end]`               | Output        | Writes to console          |
+| `Fn name "params"`                 | Function      | Defines a callable routine |
+| `call name args [end]`             | Invocation    | Executes another function  |
+| `let x = expr`                     | Variable      | Declares & assigns         |
+| `ret expr`                         | Return        | Ends function with value   |
+| `if … else … [end]`                | Branch        | Conditional control        |
+| `loop "for-header" { … } [end]`    | Iteration     | Repetition structure       |
+| Expressions (`a + b`, `(x*y) + 2`) | Arithmetic    | Fully transpiled to C++    |
+
