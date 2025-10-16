@@ -1,0 +1,7 @@
+Print "Hello from Windows C.A.S.E." [end]
+
+Fn hello () (
+  Print "Hello from self-compiled C.A.S.E.!" [end]
+) [end]
+
+call hello [end]
