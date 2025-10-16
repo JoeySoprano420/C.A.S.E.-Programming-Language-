@@ -5,7 +5,7 @@ Fn tokenize "string src" (
   let line = 1
   let tokens = []
 
-  loop "i < src.length()" {
+  loop 'i < src.length()' {
     if src[i] == '\n' {
       line = line + 1
       i = i + 1
