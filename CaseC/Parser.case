@@ -1,0 +1,112 @@
+Fn parseProgram "tokens t" (
+  Print "Parsing tokens..." [end]
+  let pos = 0
+  let root = Node "Program"
+
+  loop "pos < t.size()" {
+    call append root, parseStatement [end]
+  } [end]
+
+  ret root
+) [end]
+
+Fn parseStatement () (
+  if peek().value == "Print" {
+    ret parsePrint
+  } else if peek().value == "loop" {
+    ret parseLoop
+  } else if peek().value == "if" {
+    ret parseIf
+  } else if peek().value == "Fn" {
+    ret parseFn
+  } else if peek().value == "call" {
+    ret parseCall
+  } else if peek().value == "let" {
+    ret parseLet
+  } else if peek().value == "ret" {
+    ret parseRet
+  } else {
+    call advance [end]
+    ret Node "Unknown", peek().value
+  } [end]
+) [end]
+
+Fn parsePrint () (
+  call advance [end]
+  let n = Node "Print"
+  if peek().type == "STRING" {
+    n.value = peek().value
+    call advance [end]
+  }
+  ret n
+) [end]
+
+Fn parseLoop () (
+  call advance [end]
+  let n = Node "Loop"
+  if peek().type == "STRING" {
+    n.value = peek().value
+    call advance [end]
+  }
+  let body = parseBlock
+  call append n, body [end]
+  ret n
+) [end]
+
+Fn parseIf () (
+  call advance [end]
+  let n = Node "If"
+  let cond = peek().value
+  call advance [end]
+  let body = parseBlock
+  call append n, body [end]
+  if peek().value == "else" {
+    call advance [end]
+    let elseBody = parseBlock
+    call append n, elseBody [end]
+  }
+  ret n
+) [end]
+
+Fn parseFn () (
+  call advance [end]
+  let n = Node "Fn"
+  n.value = peek().value
+  call advance [end]
+  let body = parseBlock
+  call append n, body [end]
+  ret n
+) [end]
+
+Fn parseCall () (
+  call advance [end]
+  let n = Node "Call"
+  n.value = peek().value
+  call advance [end]
+  while peek().value != "[end]" {
+    call append n, Node "Arg", peek().value [end]
+    call advance [end]
+  } [end]
+  ret n
+) [end]
+
+Fn parseLet () (
+  call advance [end]
+  let n = Node "Let"
+  n.value = peek().value
+  call advance [end]
+  call expect "=" [end]
+  let expr = parseExpression
+  call append n, expr [end]
+  ret n
+) [end]
+
+Fn parseRet () (
+  call advance [end]
+  let n = Node "Ret"
+  if peek().value != "[end]" {
+    let expr = parseExpression
+    call append n, expr [end]
+  }
+  ret n
+) [end]
