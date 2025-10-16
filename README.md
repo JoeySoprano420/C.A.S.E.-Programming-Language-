@@ -2,6 +2,14 @@ PLEASE READ *** THIS FIRST ***
 
 CURRENTLY SUPPORTED
 
+Print "Hello, world!" [end] 
+
+☝️ works (tested several times). Save it as hi.case. copy and paste the filepath into cmd. run it. It will produce a C++ file/version of the same thing. copy and paste the filepath of the c++ version into cmd. Run it. I t will produce an .exe version of the same thing. This processs will take your hi file, and allow it to end up as an .exe file, if you follow this step by step.
+
+This will likely be the same procedure you will follow for all .case files you eventually create (based on what is currently supported as the language develops).
+
+For now experiment with small programs based on what is currently supported, and feel free to share with us, what you come up with, or discover.
+
 The C.A.S.E. compiler CURRENTLY supports a rich, domain-specific language designed for ceremony, introspection, and modular transformation. Here's a breakdown of its supported syntax, keywords, and symbols, based on the current compiler:
 
 🧠 Keywords (Control, Memory, I/O, Overlays, Systems)
