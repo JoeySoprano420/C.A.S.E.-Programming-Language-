@@ -1,0 +1,22 @@
+Fn add "int a, int b" (
+  let result = a + b
+  ret result
+) [end]
+
+Fn multiply "int a, int b" (
+  let result = a * b
+  ret result
+) [end]
+
+Fn demoMath () (
+  Print "Performing math operations..." [end]
+
+  let sum = call add 12 8 [end]
+  let product = call multiply 6 7 [end]
+
+  Print "Sum = " [end]
+  Print "Product = " [end]
+  Print "Math complete." [end]
+) [end]
+
+call demoMath [end]
