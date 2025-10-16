@@ -30,30 +30,30 @@ static bool isIdentChar(char c) {
 static bool isSymbolChar(char c) {
     // Single-char symbols sufficient for this DSL
     switch (c) {
-        case '(':
-        case ')':
-        case '{':
-        case '}':
-        case '[':
-        case ']':
-        case '=':
-        case ';':
-        case ',':
-        case '+':
-        case '-':
-        case '*':
-        case '/':
-        case '<':
-        case '>':
-        case '!':
-        case '&':
-        case '|':
-        case '%':
-        case ':':
-        case '.':
-            return true;
-        default:
-            return false;
+    case '(':
+    case ')':
+    case '{':
+    case '}':
+    case '[':
+    case ']':
+    case '=':
+    case ';':
+    case ',':
+    case '+':
+    case '-':
+    case '*':
+    case '/':
+    case '<':
+    case '>':
+    case '!':
+    case '&':
+    case '|':
+    case '%':
+    case ':':
+    case '.':
+        return true;
+    default:
+        return false;
     }
 }
 
@@ -63,13 +63,13 @@ std::vector<Token> tokenize(const std::string& src) {
     int line = 1;
 
     auto push = [&](TokenType t, const std::string& v) {
-        tokens.push_back(Token{t, v, line});
-    };
+        tokens.push_back(Token{ t, v, line });
+        };
 
     auto isKeyword = [](const std::string& s) {
         return s == "Print" || s == "ret" || s == "loop" || s == "if" ||
-               s == "else" || s == "Fn" || s == "call" || s == "let";
-    };
+            s == "else" || s == "Fn" || s == "call" || s == "let";
+        };
 
     while (i < src.size()) {
         char c = src[i];
@@ -101,7 +101,8 @@ std::vector<Token> tokenize(const std::string& src) {
             std::string ident = src.substr(start, i - start);
             if (isKeyword(ident)) {
                 push(TokenType::KEYWORD, ident);
-            } else {
+            }
+            else {
                 push(TokenType::IDENT, ident);
             }
             continue;
@@ -112,7 +113,7 @@ std::vector<Token> tokenize(const std::string& src) {
             size_t start = i++;
             bool hasDot = false;
             while (i < src.size() &&
-                   (std::isdigit(static_cast<unsigned char>(src[i])) || (!hasDot && src[i] == '.'))) {
+                (std::isdigit(static_cast<unsigned char>(src[i])) || (!hasDot && src[i] == '.'))) {
                 if (src[i] == '.') hasDot = true;
                 ++i;
             }
@@ -134,14 +135,15 @@ std::vector<Token> tokenize(const std::string& src) {
                 if (ch == '\\' && i < src.size()) {
                     char esc = src[i++];
                     switch (esc) {
-                        case 'n': acc.push_back('\n'); break;
-                        case 't': acc.push_back('\t'); break;
-                        case 'r': acc.push_back('\r'); break;
-                        case '\\': acc.push_back('\\'); break;
-                        case '"': acc.push_back('"'); break;
-                        default: acc.push_back(esc); break;
+                    case 'n': acc.push_back('\n'); break;
+                    case 't': acc.push_back('\t'); break;
+                    case 'r': acc.push_back('\r'); break;
+                    case '\\': acc.push_back('\\'); break;
+                    case '"': acc.push_back('"'); break;
+                    default: acc.push_back(esc); break;
                     }
-                } else {
+                }
+                else {
                     acc.push_back(ch);
                 }
             }
@@ -161,7 +163,7 @@ std::vector<Token> tokenize(const std::string& src) {
         throw std::runtime_error(std::string("Unexpected character '") + c + "' at line " + std::to_string(line));
     }
 
-    tokens.push_back(Token{TokenType::END, "", line});
+    tokens.push_back(Token{ TokenType::END, "", line });
     return tokens;
 }
 
@@ -225,7 +227,7 @@ static void skipBracketBlockIfPresent() {
 static Node* parseBlock() {
     // Expects current token to be '{'
     if (!matchValue("{")) throw std::runtime_error("Expected '{' to start a block at line " + std::to_string(peek().line));
-    Node* body = new Node{"Body", ""};
+    Node* body = new Node{ "Body", "" };
     while (peek().type != TokenType::END && !checkValue("}")) {
         body->children.push_back(parseStatement());
     }
@@ -235,7 +237,7 @@ static Node* parseBlock() {
 
 static Node* parsePrint() {
     advanceTok(); // consume 'Print'
-    Node* n = new Node{"Print", ""};
+    Node* n = new Node{ "Print", "" };
     if (peek().type == TokenType::STRING) {
         n->value = advanceTok().value;
     }
@@ -245,7 +247,7 @@ static Node* parsePrint() {
 
 static Node* parseRet() {
     advanceTok(); // consume 'ret'
-    Node* n = new Node{"Ret", ""};
+    Node* n = new Node{ "Ret", "" };
     if (peek().type != TokenType::END && !checkValue("[") && !checkValue("}")) {
         Node* expr = parseExpression();
         if (expr) n->children.push_back(expr);
@@ -256,7 +258,7 @@ static Node* parseRet() {
 
 static Node* parseCall() {
     advanceTok(); // consume 'call'
-    Node* n = new Node{"Call", ""};
+    Node* n = new Node{ "Call", "" };
     if (peek().type == TokenType::IDENT) {
         n->value = advanceTok().value;
     }
@@ -266,10 +268,11 @@ static Node* parseCall() {
 
 static Node* parseLet() {
     advanceTok(); // consume 'let'
-    Node* n = new Node{"Let", ""};
+    Node* n = new Node{ "Let", "" };
     if (peek().type == TokenType::IDENT) {
         n->value = advanceTok().value; // variable name
-    } else {
+    }
+    else {
         throw std::runtime_error("Expected identifier after 'let' at line " + std::to_string(peek().line));
     }
     if (!matchValue("=")) {
@@ -283,7 +286,7 @@ static Node* parseLet() {
 
 static Node* parseLoop() {
     advanceTok(); // consume 'loop'
-    Node* n = new Node{"Loop", ""};
+    Node* n = new Node{ "Loop", "" };
     // Accept either a string containing the for(...) header or a bare identifier/expression token
     if (peek().type == TokenType::STRING || peek().type == TokenType::IDENT || peek().type == TokenType::NUMBER) {
         n->value = advanceTok().value; // e.g., "int i=0; i<10; i++"
@@ -296,7 +299,7 @@ static Node* parseLoop() {
 
 static Node* parseIf() {
     advanceTok(); // consume 'if'
-    Node* n = new Node{"If", ""};
+    Node* n = new Node{ "If", "" };
     // Very simple condition capture: next non-symbol token as condition
     if (peek().type != TokenType::SYMBOL && peek().type != TokenType::END && !checkValue("{")) {
         n->value = advanceTok().value;
@@ -315,10 +318,11 @@ static Node* parseIf() {
 
 static Node* parseFn() {
     advanceTok(); // consume 'Fn'
-    Node* n = new Node{"Fn", ""};
+    Node* n = new Node{ "Fn", "" };
     if (peek().type == TokenType::IDENT) {
         n->value = advanceTok().value; // function name
-    } else {
+    }
+    else {
         throw std::runtime_error("Expected function name after 'Fn' at line " + std::to_string(peek().line));
     }
     // Use braces for function body
@@ -337,13 +341,13 @@ static int precedenceOf(const std::string& op) {
 
 static Node* parsePrimary() {
     if (peek().type == TokenType::NUMBER) {
-        return new Node{"Num", advanceTok().value};
+        return new Node{ "Num", advanceTok().value };
     }
     if (peek().type == TokenType::STRING) {
-        return new Node{"Str", advanceTok().value};
+        return new Node{ "Str", advanceTok().value };
     }
     if (peek().type == TokenType::IDENT) {
-        return new Node{"Var", advanceTok().value};
+        return new Node{ "Var", advanceTok().value };
     }
     if (checkValue("(")) {
         advanceTok(); // (
@@ -369,7 +373,7 @@ static Node* parseBinOpRHS(int minPrec, Node* lhs) {
             rhs = parseBinOpRHS(prec + 1, rhs);
         }
 
-        Node* bin = new Node{"BinOp", op};
+        Node* bin = new Node{ "BinOp", op };
         bin->children.push_back(lhs);
         bin->children.push_back(rhs);
         lhs = bin;
@@ -393,13 +397,13 @@ static Node* parseStatement() {
 
     // Unknown token - consume and produce placeholder node
     advanceTok();
-    return new Node{"Unknown", v};
+    return new Node{ "Unknown", v };
 }
 
 Node* parseProgram(const std::vector<Token>& t) {
     toks = t;
     pos = 0;
-    Node* root = new Node{"Program", ""};
+    Node* root = new Node{ "Program", "" };
     while (peek().type != TokenType::END) {
         root->children.push_back(parseStatement());
     }
@@ -413,12 +417,12 @@ static std::string escapeCppString(const std::string& s) {
     out.reserve(s.size() + 8);
     for (char c : s) {
         switch (c) {
-            case '\\': out += "\\\\"; break;
-            case '"':  out += "\\\""; break;
-            case '\n': out += "\\n"; break;
-            case '\t': out += "\\t"; break;
-            case '\r': out += "\\r"; break;
-            default:   out.push_back(c); break;
+        case '\\': out += "\\\\"; break;
+        case '"':  out += "\\\""; break;
+        case '\n': out += "\\n"; break;
+        case '\t': out += "\\t"; break;
+        case '\r': out += "\\r"; break;
+        default:   out.push_back(c); break;
         }
     }
     return out;
@@ -493,7 +497,8 @@ static void emitNode(Node* n, std::ostringstream& out) {
     else if (n->type == "Let") {
         if (n->children.empty()) {
             out << "/* invalid let */\n";
-        } else {
+        }
+        else {
             out << "auto " << n->value << " = " << emitExpr(n->children[0]) << ";\n";
         }
     }
@@ -514,6 +519,7 @@ std::string emitCPP(Node* root) {
 
 // ------------------------ Driver ------------------------
 
+#if 0
 int main(int argc, char** argv) {
     if (argc < 2) {
         std::cerr << "Usage: transpiler <input.case>\n";
@@ -541,8 +547,185 @@ int main(int argc, char** argv) {
             return 1;
         }
         out << cpp;
-        std::cout << "✅ Generated compiler.cpp\n";
-    } catch (const std::exception& ex) {
+        std::cout << "OK Generated compiler.cpp\n";
+    }
+    catch (const std::exception& ex) {
+        std::cerr << "Error: " << ex.what() << "\n";
+        return 1;
+    }
+}
+#endif
+
+// ------------------------ Built-in Clang/LLVM Compiler Engine ------------------------
+
+#include <cstdlib>
+#include <cstdio>
+
+#ifdef _WIN32
+static const char* kNull = " >nul 2>&1";
+static const char* kExeExt = ".exe";
+#else
+static const char* kNull = " >/dev/null 2>&1";
+static const char* kExeExt = "";
+#endif
+
+static std::string quote(const std::string& s) {
+    if (s.empty()) return "\"\"";
+    if (s.front() == '"' && s.back() == '"') return s;
+    return "\"" + s + "\"";
+}
+
+static bool run(const std::string& cmd) {
+    int rc = std::system(cmd.c_str());
+    return rc == 0;
+}
+
+static bool toolExists(const std::string& tool) {
+    std::string cmd = tool + " --version";
+    cmd += kNull;
+    return run(cmd);
+}
+
+static std::string baseNameNoExt(const std::string& path) {
+    size_t slash = path.find_last_of("/\\");
+    std::string name = (slash == std::string::npos) ? path : path.substr(slash + 1);
+    size_t dot = name.find_last_of('.');
+    if (dot == std::string::npos) return name;
+    return name.substr(0, dot);
+}
+
+struct ClangPipelineConfig {
+    std::string clangxx = "clang++";
+    std::string clangcl = "clang-cl";
+    std::string stdver = "-std=c++14";
+    std::string opt = "-O2";
+    bool useLLD = true;
+};
+
+static bool compileWithClangXX(const std::string& cppPath,
+    const std::string& llPath,
+    const std::string& exePath,
+    const ClangPipelineConfig& cfg) {
+    // 1) Emit LLVM IR
+    {
+        std::ostringstream cmd;
+        cmd << cfg.clangxx << " " << cfg.stdver << " " << cfg.opt
+            << " -S -emit-llvm "
+            << quote(cppPath) << " -o " << quote(llPath);
+        if (!run(cmd.str())) return false;
+    }
+    // 2) Compile to native
+    {
+        std::ostringstream cmd;
+        cmd << cfg.clangxx << " " << cfg.stdver << " " << cfg.opt << " "
+            << quote(cppPath) << " -o " << quote(exePath);
+#ifdef _WIN32
+        if (cfg.useLLD) cmd << " -fuse-ld=lld";
+#endif
+        if (!run(cmd.str())) {
+            // Retry without lld
+            std::ostringstream retry;
+            retry << cfg.clangxx << " " << cfg.stdver << " " << cfg.opt << " "
+                  << quote(cppPath) << " -o " << quote(exePath);
+            if (!run(retry.str())) return false;
+        }
+    }
+    return true;
+}
+
+#ifdef _WIN32
+static bool compileWithClangCL(const std::string& cppPath,
+    const std::string& /*llPath*/,
+    const std::string& exePath) {
+    // clang-cl (MSVC-compatible driver) - no LLVM IR step here
+    std::ostringstream cmd;
+    cmd << "clang-cl /O2 /std:c++14 " << quote(cppPath)
+        << " /Fe:" << quote(exePath);
+    return run(cmd.str());
+}
+#endif
+
+static std::string deriveOutputExe(const std::string& inputPath) {
+    std::string base = baseNameNoExt(inputPath);
+    if (base.empty()) base = "program";
+#ifdef _WIN32
+    return base + ".exe";
+#else
+    return base;
+#endif
+}
+
+// ------------------------ Driver (updated) ------------------------
+
+int main(int argc, char** argv) {
+    if (argc < 2) {
+        std::cerr << "Usage: transpiler <input.case>\n";
+        return 1;
+    }
+    std::ifstream f(argv[1], std::ios::binary);
+    if (!f) {
+        std::cerr << "Failed to open input file: " << argv[1] << "\n";
+        return 1;
+    }
+    std::string src((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+
+    try {
+        // Preprocess with CIAM features (enabled only when source contains: call CIAM[on])
+        ciam::Preprocessor ciamPre;
+        src = ciamPre.Process(src);
+
+        auto tokens = tokenize(src);
+        Node* ast = parseProgram(tokens);
+
+        // Emit C++
+        std::string cpp = emitCPP(ast);
+
+        // Persist emitted C++
+        const std::string cppPath = "compiler.cpp";
+        std::ofstream out(cppPath, std::ios::binary);
+        if (!out) {
+            std::cerr << "Failed to write " << cppPath << "\n";
+            return 1;
+        }
+        out << cpp;
+        std::cout << "[OK] Generated " << cppPath << "\n";
+
+        // Built-in Clang/LLVM compile pipeline
+        const std::string llPath = "compiler.ll";
+        const std::string exePath = deriveOutputExe(argv[1]);
+
+        ClangPipelineConfig cfg;
+        bool haveClangXX = toolExists(cfg.clangxx);
+#ifdef _WIN32
+        bool haveClangCL = toolExists(cfg.clangcl);
+#else
+        bool haveClangCL = false;
+#endif
+
+        bool ok = false;
+        if (haveClangXX) {
+            std::cout << "[INFO] Using " << cfg.clangxx << " to emit LLVM IR and native binary...\n";
+            ok = compileWithClangXX(cppPath, llPath, exePath, cfg);
+        }
+#ifdef _WIN32
+        if (!ok && haveClangCL) {
+            std::cout << "[INFO] Fallback: using clang-cl to compile native binary...\n";
+            ok = compileWithClangCL(cppPath, llPath, exePath);
+        }
+#endif
+        if (!ok) {
+            std::cerr << "[ERROR] Clang toolchain not available or compile failed.\n"
+                "   - Ensure LLVM/Clang is installed and clang++ (or clang-cl on Windows) is in PATH.\n"
+                "   - Kept emitted C++ at: " << cppPath << "\n";
+            return 1;
+        }
+
+        std::cout << "[IR]   LLVM IR: " << llPath << "\n";
+        std::cout << "[OUT]  Native binary: " << exePath << "\n";
+        std::cout << "[OK]   Build complete via Clang/LLVM pipeline.\n";
+        return 0;
+    }
+    catch (const std::exception& ex) {
         std::cerr << "Error: " << ex.what() << "\n";
         return 1;
     }
