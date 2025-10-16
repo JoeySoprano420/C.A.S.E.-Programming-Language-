@@ -1,0 +1,253 @@
+Fn tokenize "string src" (
+  Print "Starting lexical analysis..." [end]
+
+  let i = 0
+  let line = 1
+  let tokens = []
+
+  loop "i < src.length()" {
+    if src[i] == '\n' {
+      line = line + 1
+      i = i + 1
+    } else if src[i] == ' ' {
+      i = i + 1
+    } else if src[i] == '\t' {
+      i = i + 1
+    } else if src[i] == '/' {
+      if src[i+1] == '/' {
+        loop "i < src.length() && src[i] != '\n'" {
+          i = i + 1
+        } [end]
+      } else {
+        call push tokens "SYMBOL" "/" [end]
+        i = i + 1
+      }
+    } else if isLetter src[i] {
+      let start = i
+      loop "isAlphaNum(src[i])" { i = i + 1 } [end]
+      let ident = substring src start i
+      if isKeyword ident {
+        call push tokens "KEYWORD" ident [end]
+      } else {
+        call push tokens "IDENT" ident [end]
+      }
+    } else if src[i] == '"' {
+      i = i + 1
+      let acc = ""
+      loop "i < src.length() && src[i] != '\"'" {
+        acc = acc + src[i]
+        i = i + 1
+      } [end]
+      call push tokens "STRING" acc [end]
+      i = i + 1
+    } else if isDigit src[i] {
+      let start = i
+      loop "isDigit(src[i])" { i = i + 1 } [end]
+      let num = substring src start i
+      call push tokens "NUMBER" num [end]
+    } else {
+      call push tokens "SYMBOL" src[i] [end]
+      i = i + 1
+    }
+  } [end]
+
+  call push tokens "END" "" [end]
+  ret tokens
+) [end]
+
+Fn parseProgram "tokens t" (
+  Print "Parsing tokens..." [end]
+  let pos = 0
+  let root = Node "Program"
+
+  loop "pos < t.size()" {
+    call append root, parseStatement [end]
+  } [end]
+
+  ret root
+) [end]
+
+Fn parseStatement () (
+  if peek().value == "Print" {
+    ret parsePrint
+  } else if peek().value == "loop" {
+    ret parseLoop
+  } else if peek().value == "if" {
+    ret parseIf
+  } else if peek().value == "Fn" {
+    ret parseFn
+  } else if peek().value == "call" {
+    ret parseCall
+  } else if peek().value == "let" {
+    ret parseLet
+  } else if peek().value == "ret" {
+    ret parseRet
+  } else {
+    call advance [end]
+    ret Node "Unknown", peek().value
+  } [end]
+) [end]
+
+Fn parsePrint () (
+  call advance [end]
+  let n = Node "Print"
+  if peek().type == "STRING" {
+    n.value = peek().value
+    call advance [end]
+  }
+  ret n
+) [end]
+
+Fn parseLoop () (
+  call advance [end]
+  let n = Node "Loop"
+  if peek().type == "STRING" {
+    n.value = peek().value
+    call advance [end]
+  }
+  let body = parseBlock
+  call append n, body [end]
+  ret n
+) [end]
+
+Fn parseIf () (
+  call advance [end]
+  let n = Node "If"
+  let cond = peek().value
+  call advance [end]
+  let body = parseBlock
+  call append n, body [end]
+  if peek().value == "else" {
+    call advance [end]
+    let elseBody = parseBlock
+    call append n, elseBody [end]
+  }
+  ret n
+) [end]
+
+Fn parseFn () (
+  call advance [end]
+  let n = Node "Fn"
+  n.value = peek().value
+  call advance [end]
+  let body = parseBlock
+  call append n, body [end]
+  ret n
+) [end]
+
+Fn parseCall () (
+  call advance [end]
+  let n = Node "Call"
+  n.value = peek().value
+  call advance [end]
+  while peek().value != "[end]" {
+    call append n, Node "Arg", peek().value [end]
+    call advance [end]
+  } [end]
+  ret n
+) [end]
+
+Fn parseLet () (
+  call advance [end]
+  let n = Node "Let"
+  n.value = peek().value
+  call advance [end]
+  call expect "=" [end]
+  let expr = parseExpression
+  call append n, expr [end]
+  ret n
+) [end]
+
+Fn parseRet () (
+  call advance [end]
+  let n = Node "Ret"
+  if peek().value != "[end]" {
+    let expr = parseExpression
+    call append n, expr [end]
+  }
+  ret n
+) [end]
+
+Fn main () (
+  Print "=== C.A.S.E. Self-Hosting Compiler ===" [end]
+
+  Print "Loading source..." [end]
+  let src = call readFile "compiler.case" [end]
+
+  Print "Tokenizing..." [end]
+  let tokens = call tokenize src [end]
+
+  Print "Parsing..." [end]
+  let ast = call parseProgram tokens [end]
+
+  Print "Emitting C++..." [end]
+  call emitCPP ast [end]
+
+  Print "✅ Self-hosted C.A.S.E. compilation complete!" [end]
+) [end]
+
+Fn emitExpr "Node n" (
+  if n.type == "Term" {
+    Print n.value [end]
+  } else if n.type == "Expr" {
+    Print "(" [end]
+    call emitExpr n.children[0] [end]
+    Print " " + n.value + " " [end]
+    call emitExpr n.children[1] [end]
+    Print ")" [end]
+  }
+) [end]
+
+Fn emitNode "Node n" (
+  if n.type == "Program" {
+    Print "#include <iostream>" [end]
+    loop "child in n.children" {
+      if child.type == "Fn" { call emitNode child [end] }
+    } [end]
+    Print "int main(){" [end]
+    loop "child in n.children" {
+      if child.type != "Fn" { call emitNode child [end] }
+    } [end]
+    Print "return 0;}" [end]
+  } else if n.type == "Print" {
+    Print "std::cout << \"" + n.value + "\" << std::endl;" [end]
+  } else if n.type == "Loop" {
+    Print "for(" + n.value + "){" [end]
+    loop "c in n.children" { call emitNode c [end] } [end]
+    Print "}" [end]
+  } else if n.type == "If" {
+    Print "if(" + n.value + "){" [end]
+    loop "c in n.children[0].children" { call emitNode c [end] } [end]
+    Print "}" [end]
+    if n.children.size() > 1 {
+      Print "else{" [end]
+      loop "c in n.children[1].children" { call emitNode c [end] } [end]
+      Print "}" [end]
+    }
+  } else if n.type == "Fn" {
+    Print "void " + n.value + "(){" [end]
+    loop "c in n.children[0].children" { call emitNode c [end] } [end]
+    Print "}" [end]
+  } else if n.type == "Call" {
+    Print n.value + "(" [end]
+    loop "arg in n.children" {
+      Print arg.value [end]
+      Print ", " [end]
+    } [end]
+    Print ");" [end]
+  } else if n.type == "Let" {
+    Print "auto " + n.value + " = " [end]
+    call emitExpr n.children[0] [end]
+    Print ";" [end]
+  } else if n.type == "Ret" {
+    Print "return " [end]
+    call emitExpr n.children[0] [end]
+    Print ";" [end]
+  }
+) [end]
+
+Fn emitCPP "Node root" (
+  Print "Emitting C++ code..." [end]
+  call emitNode root [end]
+  Print "C++ emission complete." [end]
+) [end]
