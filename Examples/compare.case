@@ -12,7 +12,7 @@ Fn mainFunc () (
   let x = 42
   let y = 56
   Print "Comparing values..." [end]
-  let larger = call compare [end]
+  let larger = call compare x y [end]
   Print "Done comparing." [end]
 ) [end]
 
