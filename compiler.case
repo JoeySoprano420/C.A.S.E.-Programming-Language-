@@ -251,3 +251,128 @@ Fn emitCPP ‘Node root’ (
   call emitNode root [end]
   Print ‘C++ emission complete.’ [end]
 ) [end]
+
+call CIAM[on] [end]  // 🔁 Activate CIAM preprocessing and macro learning
+
+@overlay audit
+Fn mutate_self () (
+  Print "🔍 Compiler introspecting its own AST..." [end]
+  call audit_symbols [end]
+  ret 0
+) [end]
+
+Fn mutate () (
+  call mutate_self [end]
+) [end]
+
+Fn hello () (
+  Print "🌟 Hello from self-evolving C.A.S.E.!" [end]
+  call mutate_self [end]
+) [end]
+
+loop "@omp @vectorize @unroll(4) int i=0; i<1; i++" {
+  call hello [end]
+} [end]
+
+@overlay audit
+Fn audit_failure "int code" (
+  if code != 0 {
+    Print "⚠️ Error detected: code = " + code [end]
+    let fix = call mutate_logic code [end]
+    Print "🔁 Applied fix = " + fix [end]
+  } else {
+    Print "✅ No error detected." [end]
+  } [end]
+  ret code
+) [end]
+
+@overlay mutate
+Fn mutate_logic "int err" (
+  checkpoint "before_mutation" [end]
+
+  if err == 1 {
+    Print "🔁 Rewriting logic for error 1..." [end]
+    let fix = 42
+  } else if err == 2 {
+    Print "🔁 Rewriting logic for error 2..." [end]
+    let fix = err * 2
+  } else if err == 404 {
+    Print "🔁 Error 404: Symbol not found — applying fallback patch." [end]
+    let fix = 0
+  } else {
+    Print "🔁 Unknown error — applying fallback mutation." [end]
+    let fix = -1
+  } [end]
+
+  replay "before_mutation" [end]
+  ret fix
+) [end]
+
+Fn test_case () (
+  Print "🧪 Running test case..." [end]
+  let result = call audit_failure 2 [end]
+  Print "🔍 Final result after mutation = " + result [end]
+  ret 0
+) [end]
+
+call test_case [end]
+
+Print "✅ Ceremony complete." [end]
+
+@overlay emit_macro
+Fn emit_macro "string pattern" (
+  if pattern == "error_1" {
+    Print "🧠 Emitting macro: fix_error_1()" [end]
+    Print "macro fix_error_1() { ret 42 }" [end]
+  } else if pattern == "error_2" {
+    Print "🧠 Emitting macro: fix_error_2(x)" [end]
+    Print "macro fix_error_2(x) { ret x * 2 }" [end]
+  } else if pattern == "error_404" {
+    Print "🧠 Emitting macro: fix_missing()" [end]
+    Print "macro fix_missing() { ret 0 }" [end]
+  } else {
+    Print "🧠 Emitting macro: fix_unknown()" [end]
+    Print "macro fix_unknown() { ret -1 }" [end]
+  } [end]
+  ret 0
+) [end]
+
+@overlay mutate
+Fn mutate_logic "int err" (
+  checkpoint "before_mutation" [end]
+
+  if err == 1 {
+    call emit_macro "error_1" [end]
+    let fix = fix_error_1()  // symbolic macro usage
+  } else if err == 2 {
+    call emit_macro "error_2" [end]
+    let fix = fix_error_2(err)
+  } else if err == 404 {
+    call emit_macro "error_404" [end]
+    let fix = fix_missing()
+  } else {
+    call emit_macro "unknown" [end]
+    let fix = fix_unknown()
+  } [end]
+
+  replay "before_mutation" [end]
+  ret fix
+) [end]
+
+Fn detect_user_patterns () (
+  Print "🔍 Scanning user input for symbolic patterns..." [end]
+  call emit_macro "error_2" [end]  // Example: detected error code 2
+  call emit_macro "error_404" [end]  // Example: detected missing symbol
+  ret 0
+) [end]
+
+call detect_user_patterns [end]
+call test_case [end]
+
+macro fix_error_2(x) { ret x * 2 }
+
+Fn resolve () (
+  let result = fix_error_2(7)
+  Print "Resolved = " + result [end]
+  ret result
+) [end] 
