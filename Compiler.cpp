@@ -7,6 +7,10 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <algorithm>
+#include <functional>
+#include <unordered_map>
+#include <unordered_set>
 #include "intelligence.hpp" // CIAM preprocessor (write_stdout, overlays/inspect, sandbox/audit, base-12)
 
 // ------------------------ Lexer ------------------------
@@ -410,6 +414,182 @@ Node* parseProgram(const std::vector<Token>& t) {
     return root;
 }
 
+// ------------------------ Optimizer (constant fold, DCE, inlining, peephole) ------------------------
+
+static bool isNum(Node* n) { return n && n->type == "Num"; }
+static bool isStr(Node* n) { return n && n->type == "Str"; }
+
+static bool toDouble(const std::string& s, double& out) {
+    char* endp = nullptr;
+    out = std::strtod(s.c_str(), &endp);
+    return endp && *endp == '\0';
+}
+static Node* makeNum(double v) {
+    std::ostringstream ss; ss << v; return new Node{"Num", ss.str()};
+}
+static Node* clone(Node* n) {
+    if (!n) return nullptr;
+    Node* c = new Node{n->type, n->value};
+    for (auto* ch : n->children) c->children.push_back(clone(ch));
+    return c;
+}
+static Node* fold(Node* n);
+
+static Node* peephole(Node* n) {
+    if (!n) return n;
+    if (n->type == "BinOp" && n->children.size() == 2) {
+        Node* L = n->children[0];
+        Node* R = n->children[1];
+        // x + 0 -> x | 0 + x -> x
+        if (n->value == "+") {
+            if (isNum(L) && L->value == "0") return clone(R);
+            if (isNum(R) && R->value == "0") return clone(L);
+        }
+        // x - 0 -> x
+        if (n->value == "-" && isNum(R) && R->value == "0") return clone(L);
+        // x * 1 -> x | 1 * x -> x | x * 0 -> 0 | 0 * x -> 0
+        if (n->value == "*") {
+            if (isNum(L) && L->value == "1") return clone(R);
+            if (isNum(R) && R->value == "1") return clone(L);
+            if ((isNum(L) && L->value == "0") || (isNum(R) && R->value == "0")) return makeNum(0);
+        }
+        // x / 1 -> x
+        if (n->value == "/" && isNum(R) && R->value == "1") return clone(L);
+    }
+    return n;
+}
+
+static Node* foldBinop(Node* n) {
+    if (!n || n->type != "BinOp" || n->children.size() < 2) return n;
+    n->children[0] = fold(n->children[0]);
+    n->children[1] = fold(n->children[1]);
+
+    Node* L = n->children[0];
+    Node* R = n->children[1];
+
+    // String concatenation folding for '+'
+    if (n->value == "+" && isStr(L) && isStr(R)) {
+        return new Node{"Str", L->value + R->value};
+    }
+
+    // Numeric folding
+    double a, b;
+    if (isNum(L) && isNum(R) && toDouble(L->value, a) && toDouble(R->value, b)) {
+        if (n->value == "+") return makeNum(a + b);
+        if (n->value == "-") return makeNum(a - b);
+        if (n->value == "*") return makeNum(a * b);
+        if (n->value == "/") return makeNum(b == 0 ? 0 : (a / b));
+        if (n->value == "<")  return makeNum((a <  b) ? 1 : 0);
+        if (n->value == ">")  return makeNum((a >  b) ? 1 : 0);
+        if (n->value == "<=") return makeNum((a <= b) ? 1 : 0);
+        if (n->value == ">=") return makeNum((a >= b) ? 1 : 0);
+        if (n->value == "==") return makeNum((a == b) ? 1 : 0);
+        if (n->value == "!=") return makeNum((a != b) ? 1 : 0);
+    }
+    // Peephole algebraic
+    return peephole(n);
+}
+
+static Node* fold(Node* n) {
+    if (!n) return n;
+    if (n->type == "BinOp") return foldBinop(n);
+    for (size_t i = 0; i < n->children.size(); ++i) n->children[i] = fold(n->children[i]);
+    // If we had expression conditions, we could fold if-branches here.
+    return n;
+}
+
+static void dce(Node* n) {
+    if (!n) return;
+    if (n->type == "Body") {
+        std::vector<Node*> keep;
+        bool seenRet = false;
+        for (auto* ch : n->children) {
+            if (seenRet) continue;
+            keep.push_back(ch);
+            if (ch->type == "Ret") seenRet = true;
+        }
+        n->children.swap(keep);
+    }
+    for (auto* ch : n->children) dce(ch);
+}
+
+// Inline: single-expression-return, non-recursive
+struct InlineFn {
+    std::vector<std::string> params;
+    Node* expr = nullptr;
+    bool recursive = false;
+};
+
+static void collectInlineFns(Node* root, std::unordered_map<std::string, InlineFn>& table) {
+    if (!root || root->type != "Program") return;
+    for (auto* fn : root->children) {
+        if (fn->type != "Fn") continue;
+        InlineFn cand;
+        Node* body = nullptr;
+        std::vector<std::string> params;
+        for (auto* ch : fn->children) {
+            if (ch->type == "Param") {
+                if (!ch->children.empty()) params.push_back(ch->children[0]->value);
+            } else if (ch->type == "Body") {
+                body = ch;
+            }
+        }
+        if (!body) continue;
+        if (body->children.size() == 1 && body->children[0]->type == "Ret" && !body->children[0]->children.empty()) {
+            cand.params = params;
+            cand.expr = clone(body->children[0]->children[0]);
+            // simple recursion scan
+            std::function<void(Node*)> scan = [&](Node* n) {
+                if (!n) return;
+                if (n->type == "CallExpr" && n->value == fn->value) cand.recursive = true;
+                for (auto* c : n->children) scan(c);
+            };
+            scan(cand.expr);
+            if (!cand.recursive) table[fn->value] = cand;
+        }
+    }
+}
+
+static Node* subst(Node* n, const std::unordered_map<std::string, Node*>& env) {
+    if (!n) return nullptr;
+    if (n->type == "Var") {
+        auto it = env.find(n->value);
+        if (it != env.end()) return clone(it->second);
+        return new Node{"Var", n->value};
+    }
+    Node* c = new Node{n->type, n->value};
+    for (auto* ch : n->children) c->children.push_back(subst(ch, env));
+    return c;
+}
+
+static Node* inlineCalls(Node* n, const std::unordered_map<std::string, InlineFn>& table) {
+    if (!n) return n;
+    for (size_t i = 0; i < n->children.size(); ++i) n->children[i] = inlineCalls(n->children[i], table);
+    if (n->type == "CallExpr") {
+        auto it = table.find(n->value);
+        if (it != table.end()) {
+            const InlineFn& f = it->second;
+            std::unordered_map<std::string, Node*> env;
+            for (size_t i = 0; i < f.params.size() && i < n->children.size(); ++i) env[f.params[i]] = n->children[i];
+            Node* inlined = subst(f.expr, env);
+            return fold(inlined);
+        }
+    }
+    return n;
+}
+
+static void optimize(Node*& root) {
+    if (!root) return;
+    root = fold(root);   // constant folding + peephole
+    dce(root);           // dead code elimination
+    // inline after fold
+    std::unordered_map<std::string, InlineFn> table;
+    collectInlineFns(root, table);
+    root = inlineCalls(root, table);
+    root = fold(root);
+    dce(root);
+}
+
 // ------------------------ Emitter ------------------------
 
 static std::string escapeCppString(const std::string& s) {
@@ -455,10 +635,36 @@ static void emitChildren(const std::vector<Node*>& cs, std::ostringstream& out) 
     for (auto* c : cs) emitNode(c, out);
 }
 
+// Loop hints: parse header markers like "@unroll(4) @vectorize @parallel @omp"
+struct LoopHints { int unroll = 0; bool vectorize = false; bool ivdep = false; bool omp = false; };
+static LoopHints extractLoopHints(std::string& header) {
+    LoopHints h{};
+    auto eraseAll = [&](const std::string& tag) {
+        for (;;) { auto p = header.find(tag); if (p == std::string::npos) break; header.erase(p, tag.size()); }
+    };
+    // @unroll(N)
+    {
+        auto p = header.find("@unroll(");
+        if (p != std::string::npos) {
+            auto q = header.find(")", p + 8);
+            if (q != std::string::npos) {
+                std::string n = header.substr(p + 8, q - (p + 8));
+                try { h.unroll = std::stoi(n); } catch (...) {}
+                header.erase(p, (q - p) + 1);
+            }
+        }
+    }
+    if (header.find("@vectorize") != std::string::npos) { h.vectorize = true; eraseAll("@vectorize"); }
+    if (header.find("@ivdep")     != std::string::npos) { h.ivdep     = true; eraseAll("@ivdep"); }
+    if (header.find("@omp")       != std::string::npos) { h.omp       = true; eraseAll("@omp"); }
+    if (header.find("@parallel")  != std::string::npos) { h.omp       = true; eraseAll("@parallel"); } // treat as omp
+    return h;
+}
+
 static void emitNode(Node* n, std::ostringstream& out) {
     if (n->type == "Program") {
         out << "#include <iostream>\n";
-        out << "\n";
+        out << "#if defined(_OPENMP)\n#include <omp.h>\n#endif\n\n";
         // Emit function declarations/definitions first
         for (auto* c : n->children)
             if (c->type == "Fn") emitNode(c, out);
@@ -471,7 +677,23 @@ static void emitNode(Node* n, std::ostringstream& out) {
         out << "std::cout << \"" << escapeCppString(n->value) << "\" << std::endl;\n";
     }
     else if (n->type == "Loop") {
-        out << "for(" << n->value << "){\n";
+        std::string header = n->value;
+        LoopHints hints = extractLoopHints(header);
+        // Vectorization and unrolling pragmas (vendor-guarded)
+#if defined(__clang__)
+        if (hints.vectorize) out << "#pragma clang loop vectorize(enable)\n";
+        if (hints.unroll > 1) out << "#pragma clang loop unroll(enable) unroll_count(" << hints.unroll << ")\n";
+#elif defined(__GNUG__)
+        if (hints.vectorize) out << "#pragma GCC ivdep\n";
+        if (hints.unroll > 1) out << "#pragma GCC unroll " << hints.unroll << "\n";
+#elif defined(_MSC_VER)
+        if (hints.ivdep || hints.vectorize) out << "#pragma loop(ivdep)\n";
+        // MSVC unroll pragma not standardized; rely on /O2 auto-unroll.
+#endif
+#if defined(_OPENMP)
+        if (hints.omp) out << "#pragma omp parallel for\n";
+#endif
+        out << "for(" << header << "){\n";
         if (!n->children.empty()) emitChildren(n->children[0]->children, out);
         out << "}\n";
     }
@@ -519,7 +741,6 @@ std::string emitCPP(Node* root) {
 
 // ------------------------ Driver ------------------------
 
-#if 0
 int main(int argc, char** argv) {
     if (argc < 2) {
         std::cerr << "Usage: transpiler <input.case>\n";
@@ -539,6 +760,10 @@ int main(int argc, char** argv) {
 
         auto tokens = tokenize(src);
         Node* ast = parseProgram(tokens);
+
+        // AOT optimizations (constant fold, peephole, DCE, inlining)
+        optimize(ast);
+
         std::string cpp = emitCPP(ast);
 
         std::ofstream out("compiler.cpp", std::ios::binary);
@@ -547,183 +772,7 @@ int main(int argc, char** argv) {
             return 1;
         }
         out << cpp;
-        std::cout << "OK Generated compiler.cpp\n";
-    }
-    catch (const std::exception& ex) {
-        std::cerr << "Error: " << ex.what() << "\n";
-        return 1;
-    }
-}
-#endif
-
-// ------------------------ Built-in Clang/LLVM Compiler Engine ------------------------
-
-#include <cstdlib>
-#include <cstdio>
-
-#ifdef _WIN32
-static const char* kNull = " >nul 2>&1";
-static const char* kExeExt = ".exe";
-#else
-static const char* kNull = " >/dev/null 2>&1";
-static const char* kExeExt = "";
-#endif
-
-static std::string quote(const std::string& s) {
-    if (s.empty()) return "\"\"";
-    if (s.front() == '"' && s.back() == '"') return s;
-    return "\"" + s + "\"";
-}
-
-static bool run(const std::string& cmd) {
-    int rc = std::system(cmd.c_str());
-    return rc == 0;
-}
-
-static bool toolExists(const std::string& tool) {
-    std::string cmd = tool + " --version";
-    cmd += kNull;
-    return run(cmd);
-}
-
-static std::string baseNameNoExt(const std::string& path) {
-    size_t slash = path.find_last_of("/\\");
-    std::string name = (slash == std::string::npos) ? path : path.substr(slash + 1);
-    size_t dot = name.find_last_of('.');
-    if (dot == std::string::npos) return name;
-    return name.substr(0, dot);
-}
-
-struct ClangPipelineConfig {
-    std::string clangxx = "clang++";
-    std::string clangcl = "clang-cl";
-    std::string stdver = "-std=c++14";
-    std::string opt = "-O2";
-    bool useLLD = true;
-};
-
-static bool compileWithClangXX(const std::string& cppPath,
-    const std::string& llPath,
-    const std::string& exePath,
-    const ClangPipelineConfig& cfg) {
-    // 1) Emit LLVM IR
-    {
-        std::ostringstream cmd;
-        cmd << cfg.clangxx << " " << cfg.stdver << " " << cfg.opt
-            << " -S -emit-llvm "
-            << quote(cppPath) << " -o " << quote(llPath);
-        if (!run(cmd.str())) return false;
-    }
-    // 2) Compile to native
-    {
-        std::ostringstream cmd;
-        cmd << cfg.clangxx << " " << cfg.stdver << " " << cfg.opt << " "
-            << quote(cppPath) << " -o " << quote(exePath);
-#ifdef _WIN32
-        if (cfg.useLLD) cmd << " -fuse-ld=lld";
-#endif
-        if (!run(cmd.str())) {
-            // Retry without lld
-            std::ostringstream retry;
-            retry << cfg.clangxx << " " << cfg.stdver << " " << cfg.opt << " "
-                  << quote(cppPath) << " -o " << quote(exePath);
-            if (!run(retry.str())) return false;
-        }
-    }
-    return true;
-}
-
-#ifdef _WIN32
-static bool compileWithClangCL(const std::string& cppPath,
-    const std::string& /*llPath*/,
-    const std::string& exePath) {
-    // clang-cl (MSVC-compatible driver) - no LLVM IR step here
-    std::ostringstream cmd;
-    cmd << "clang-cl /O2 /std:c++14 " << quote(cppPath)
-        << " /Fe:" << quote(exePath);
-    return run(cmd.str());
-}
-#endif
-
-static std::string deriveOutputExe(const std::string& inputPath) {
-    std::string base = baseNameNoExt(inputPath);
-    if (base.empty()) base = "program";
-#ifdef _WIN32
-    return base + ".exe";
-#else
-    return base;
-#endif
-}
-
-// ------------------------ Driver (updated) ------------------------
-
-int main(int argc, char** argv) {
-    if (argc < 2) {
-        std::cerr << "Usage: transpiler <input.case>\n";
-        return 1;
-    }
-    std::ifstream f(argv[1], std::ios::binary);
-    if (!f) {
-        std::cerr << "Failed to open input file: " << argv[1] << "\n";
-        return 1;
-    }
-    std::string src((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-
-    try {
-        // Preprocess with CIAM features (enabled only when source contains: call CIAM[on])
-        ciam::Preprocessor ciamPre;
-        src = ciamPre.Process(src);
-
-        auto tokens = tokenize(src);
-        Node* ast = parseProgram(tokens);
-
-        // Emit C++
-        std::string cpp = emitCPP(ast);
-
-        // Persist emitted C++
-        const std::string cppPath = "compiler.cpp";
-        std::ofstream out(cppPath, std::ios::binary);
-        if (!out) {
-            std::cerr << "Failed to write " << cppPath << "\n";
-            return 1;
-        }
-        out << cpp;
-        std::cout << "[OK] Generated " << cppPath << "\n";
-
-        // Built-in Clang/LLVM compile pipeline
-        const std::string llPath = "compiler.ll";
-        const std::string exePath = deriveOutputExe(argv[1]);
-
-        ClangPipelineConfig cfg;
-        bool haveClangXX = toolExists(cfg.clangxx);
-#ifdef _WIN32
-        bool haveClangCL = toolExists(cfg.clangcl);
-#else
-        bool haveClangCL = false;
-#endif
-
-        bool ok = false;
-        if (haveClangXX) {
-            std::cout << "[INFO] Using " << cfg.clangxx << " to emit LLVM IR and native binary...\n";
-            ok = compileWithClangXX(cppPath, llPath, exePath, cfg);
-        }
-#ifdef _WIN32
-        if (!ok && haveClangCL) {
-            std::cout << "[INFO] Fallback: using clang-cl to compile native binary...\n";
-            ok = compileWithClangCL(cppPath, llPath, exePath);
-        }
-#endif
-        if (!ok) {
-            std::cerr << "[ERROR] Clang toolchain not available or compile failed.\n"
-                "   - Ensure LLVM/Clang is installed and clang++ (or clang-cl on Windows) is in PATH.\n"
-                "   - Kept emitted C++ at: " << cppPath << "\n";
-            return 1;
-        }
-
-        std::cout << "[IR]   LLVM IR: " << llPath << "\n";
-        std::cout << "[OUT]  Native binary: " << exePath << "\n";
-        std::cout << "[OK]   Build complete via Clang/LLVM pipeline.\n";
-        return 0;
+        std::cout << "[OK] Generated compiler.cpp\n";
     }
     catch (const std::exception& ex) {
         std::cerr << "Error: " << ex.what() << "\n";
