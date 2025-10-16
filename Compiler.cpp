@@ -11,6 +11,10 @@
 #include <functional>
 #include <unordered_map>
 #include <unordered_set>
+#include <deque>
+#include <mutex>
+#include <condition_variable>
+
 #include "intelligence.hpp" // CIAM preprocessor (write_stdout, overlays/inspect, sandbox/audit, base-12)
 
 // ------------------------ Lexer ------------------------
@@ -764,7 +768,136 @@ static void analyze(Node* n, std::vector<std::unordered_map<std::string, TypeKin
     for (auto* c : n->children) analyze(c, scopes);
 }
 
-// ------------------------ Optimizer (constant fold, DCE, inlining, peephole) ------------------------
+// ------------------------ Introspection & Plugin System ------------------------
+
+static bool gEnableInspect = false;
+static bool gEnableReplay = false;
+static bool gEnableMutate = false;
+
+// Snapshot buffer for symbolic replay
+struct Snapshot {
+    std::string phase;
+    std::string payload; // text or AST dump
+};
+static std::vector<Snapshot> gReplay;
+
+static void dumpIndent(std::ostringstream& os, int n) {
+    for (int i = 0; i < n; ++i) os << ' ';
+}
+
+static void dumpASTRec(Node* n, std::ostringstream& os, int depth) {
+    if (!n) return;
+    dumpIndent(os, depth);
+    os << n->type;
+    if (!n->value.empty()) os << "(" << n->value << ")";
+    os << "\n";
+    for (auto* c : n->children) dumpASTRec(c, os, depth + 2);
+}
+
+static std::string dumpAST(Node* root) {
+    std::ostringstream os;
+    dumpASTRec(root, os, 0);
+    return os.str();
+}
+
+using AstTransformFn = bool(*)(Node*& root, const char* passName);
+using AstSinkFn = void(*)(const char* phase, const Node* root);
+using TextSinkFn = void(*)(const char* phase, const char* text, size_t len);
+
+struct PluginRegistry {
+    std::vector<std::pair<std::string, AstTransformFn>> transforms;
+    std::vector<AstSinkFn> astSinks;
+    std::vector<TextSinkFn> textSinks;
+
+    void RegisterTransform(const std::string& name, AstTransformFn fn) {
+        transforms.emplace_back(name, fn);
+    }
+    void RegisterAstSink(AstSinkFn fn) { astSinks.push_back(fn); }
+    void RegisterTextSink(TextSinkFn fn) { textSinks.push_back(fn); }
+};
+
+static PluginRegistry& Registry() {
+    static PluginRegistry R;
+    return R;
+}
+
+static void emitEventAst(const char* phase, Node* root) {
+    if (gEnableInspect || gEnableReplay) {
+        for (auto& s : Registry().astSinks) s(phase, root);
+    }
+    if (gEnableReplay) {
+        gReplay.push_back({ phase, dumpAST(root) });
+    }
+}
+
+static void emitEventText(const char* phase, const std::string& text) {
+    if (gEnableInspect || gEnableReplay) {
+        for (auto& s : Registry().textSinks) s(phase, text.c_str(), text.size());
+    }
+    if (gEnableReplay) {
+        gReplay.push_back({ phase, text });
+    }
+}
+
+static void runTransforms(const char* passPoint, Node*& root) {
+    if (!gEnableMutate) return;
+    for (auto& p : Registry().transforms) {
+        // Run all transforms; pass point allows plugin to branch internally if needed
+        if (p.second) {
+            bool changed = p.second(root, passPoint);
+            (void)changed;
+        }
+    }
+}
+
+// Built-in Introspection sink: no-op (extend to log externally if needed)
+static void builtinAstSink(const char* /*phase*/, const Node* /*root*/) {
+    // Hook for CIAM overlays or external bridges.
+}
+
+static void builtinTextSink(const char* /*phase*/, const char* /*text*/, size_t /*len*/) {
+    // Hook for CIAM overlays or external bridges.
+}
+
+// Forward declaration for internal optimizer (defined later in this file)
+static void optimize(Node*& root);
+
+// Built-in mutation: evolutionary re-optimization (re-run optimize a few rounds)
+static bool mutateEvolve(Node*& root, const char* passPoint) {
+    // Apply extra simplification rounds at known points
+    if (std::string(passPoint) == "before-opt" || std::string(passPoint) == "after-opt") {
+        // very lightweight "evolution": two extra folds and DCE sweeps
+        optimize(root);
+        optimize(root);
+        return true;
+    }
+    return false;
+}
+
+// Collects overlays to enable features (mutate/inspect/replay)
+static void collectOverlaysFlags(Node* n) {
+    if (!n) return;
+    if (n->type == "Overlay") {
+        if (n->value == "mutate") gEnableMutate = true;
+        if (n->value == "inspect") gEnableInspect = true;
+        if (n->value == "replay") gEnableReplay = true;
+        if (n->value == "audit") gEnableInspect = true;
+    }
+    if (n->type == "Mutate") gEnableMutate = true;
+    for (auto* c : n->children) collectOverlaysFlags(c);
+}
+
+static void initPluginsOnce() {
+    static bool inited = false;
+    if (inited) return;
+    inited = true;
+    // Register built-ins
+    Registry().RegisterAstSink(&builtinAstSink);
+    Registry().RegisterTextSink(&builtinTextSink);
+    Registry().RegisterTransform("mutate-evolve", &mutateEvolve);
+}
+
+// ------------------------ Optimizer (constant fold, DCE, peephole) ------------------------
 
 static bool isNum(Node* n) { return n && n->type == "Num"; }
 static bool isStr(Node* n) { return n && n->type == "Str"; }
@@ -854,18 +987,6 @@ static void dce(Node* n) {
     }
     for (auto* ch : n->children) dce(ch);
 }
-
-// Inline: single-expression-return, non-recursive (not covered in this extended grammar; kept for completeness)
-struct InlineFn {
-    std::vector<std::string> params;
-    Node* expr = nullptr;
-    bool recursive = false;
-};
-
-static void collectInlineFns(Node* root, std::unordered_map<std::string, InlineFn>&) {
-    (void)root;
-}
-static Node* inlineCalls(Node* n, const std::unordered_map<std::string, InlineFn>&) { return n; }
 
 static void optimize(Node*& root) {
     if (!root) return;
@@ -1207,17 +1328,44 @@ int main(int argc, char** argv) {
         ciam::Preprocessor ciamPre;
         src = ciamPre.Process(src);
 
-        auto tokens = tokenize(src);
-        Node* ast = parseProgram(tokens);
+        // Init plugins/overlays system
+        initPluginsOnce();
 
-        // Basic type checking (warnings only)
+        // Lex
+        auto tokens = tokenize(src);
+        {
+            // tokens snapshot as a single-line summary
+            std::ostringstream ts;
+            ts << "tokens=" << tokens.size();
+            emitEventText("tokens", ts.str());
+        }
+
+        // Parse
+        Node* ast = parseProgram(tokens);
+        emitEventAst("parsed", ast);
+
+        // Collect overlays to enable CIAM-like behaviors
+        collectOverlaysFlags(ast);
+
+        // Analyze types
         std::vector<std::unordered_map<std::string, TypeKind>> scopes;
         analyze(ast, scopes);
+        emitEventAst("analyzed", ast);
 
-        // AOT optimizations (constant fold, peephole, DCE)
+        // Plugin transforms before optimize
+        runTransforms("before-opt", ast);
+
+        // Optimize
         optimize(ast);
+        emitEventAst("optimized", ast);
 
+        // Plugin transforms after optimize
+        runTransforms("after-opt", ast);
+
+        // Emit C++
+        emitEventAst("before-emit", ast);
         std::string cpp = emitCPP(ast);
+        emitEventText("emitted-cpp", cpp);
 
         std::ofstream out("compiler.cpp", std::ios::binary);
         if (!out) {
@@ -1226,6 +1374,20 @@ int main(int argc, char** argv) {
         }
         out << cpp;
         std::cout << "[OK] Generated compiler.cpp\n";
+
+        // Write symbolic replay if enabled
+        if (gEnableReplay) {
+            std::ofstream replay("replay.txt", std::ios::binary);
+            if (replay) {
+                for (auto& s : gReplay) {
+                    replay << "=== " << s.phase << " ===\n";
+                    replay << s.payload << "\n";
+                }
+                std::cout << "[OK] Wrote symbolic replay to replay.txt\n";
+            } else {
+                std::cerr << "[warn] failed to write replay.txt\n";
+            }
+        }
     }
     catch (const std::exception& ex) {
         std::cerr << "Error: " << ex.what() << "\n";
