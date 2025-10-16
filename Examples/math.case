@@ -20,3 +20,101 @@ Fn demoMath () (
 ) [end]
 
 call demoMath [end]
+
+# ----------------------------------------------------------
+# 🧠  ADVANCED MATH DEMONSTRATION IN C.A.S.E.
+# ----------------------------------------------------------
+
+Fn add "double a, double b" (
+  ret a + b
+) [end]
+
+Fn subtract "double a, double b" (
+  ret a - b
+) [end]
+
+Fn multiply "double a, double b" (
+  ret a * b
+) [end]
+
+Fn divide "double a, double b" (
+  if b == 0 {
+    Print "⚠️  Division by zero!" [end]
+    ret 0
+  } else {
+    ret a / b
+  } [end]
+) [end]
+
+Fn power "double base, double exp" (
+  ret pow(base, exp)
+) [end]
+
+Fn ratio "double a, double b" (
+  if b == 0 {
+    Print "⚠️  Invalid ratio (b=0)" [end]
+    ret 0
+  } else {
+    ret a / b
+  } [end]
+) [end]
+
+Fn fibonacci "int n" (
+  if n <= 1 {
+    ret n
+  } else {
+    ret fibonacci(n - 1) + fibonacci(n - 2)
+  } [end]
+) [end]
+
+Fn radians "double deg" (
+  ret (deg * 3.141592653589793 / 180.0)
+) [end]
+
+Fn sine "double deg" (
+  ret sin(radians(deg))
+) [end]
+
+Fn cosine "double deg" (
+  ret cos(radians(deg))
+) [end]
+
+Fn polynomial "double x" (
+  # Example: 3x² + 2x + 1
+  ret (3 * x * x) + (2 * x) + 1
+) [end]
+
+Fn demoMath () (
+  Print "🧮  Performing extended math operations..." [end]
+
+  let sum        = call add 12.5 8.25 [end]
+  let difference = call subtract 12.5 8.25 [end]
+  let product    = call multiply 6.2 7.1 [end]
+  let quotient   = call divide 50.0 4.0 [end]
+  let powerVal   = call power 2 8 [end]
+  let fib10      = call fibonacci 10 [end]
+  let ratioVal   = call ratio 5 8 [end]
+  let angle      = 45.0
+  let sinVal     = call sine angle [end]
+  let cosVal     = call cosine angle [end]
+  let polyVal    = call polynomial 4 [end]
+
+  Print "Sum (12.5 + 8.25) = " [end]
+  Print "Difference (12.5 - 8.25) = " [end]
+  Print "Product (6.2 * 7.1) = " [end]
+  Print "Quotient (50 / 4) = " [end]
+  Print "Power (2^8) = " [end]
+  Print "Fibonacci(10) = " [end]
+  Print "Ratio (5:8) = " [end]
+  Print "Sine(45°) = " [end]
+  Print "Cosine(45°) = " [end]
+  Print "Polynomial f(x)=3x²+2x+1 at x=4 = " [end]
+
+  # Conceptual calls (visual subsystems)
+  call plotGraph polyVal [end]
+  call showTable ratioVal [end]
+
+  Print "✅  Advanced math complete." [end]
+) [end]
+
+call demoMath [end]
