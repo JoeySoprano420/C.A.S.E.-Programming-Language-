@@ -732,3 +732,32 @@ Demo complete.
 | `loop "for-header" { … } [end]`    | Iteration     | Repetition structure       |
 | Expressions (`a + b`, `(x*y) + 2`) | Arithmetic    | Fully transpiled to C++    |
 
+## -----
+
+CIAM Preprocessing (Conditional) If the source contains call CIAM[on], it runs a CIAM-specific preprocessing pass using ciam::Preprocessor.
+
+Tokenization & Parsing Converts the preprocessed source into tokens and parses them into an AST (Node * ast = parseProgram(tokens)).
+
+C++ Emission Emits C++ code from the AST (std::string cpp = emitCPP(ast)), then writes it to compiler.cpp.
+
+Clang/LLVM Compilation
+
+Attempts to compile the emitted C++ using clang++ (or clang-cl on Windows).
+
+Produces:
+
+LLVM IR (compiler.ll)
+
+Native binary (exePath, derived from input args)
+
+Fallback & Error Handling
+
+If Clang tools aren't available or compilation fails, it logs errors and exits.
+
+Keeps the emitted C++ for debugging even if compilation fails.
+
+Final Output Logging
+
+Logs paths to the LLVM IR and native binary.
+
+Confirms successful build via Clang/LLVM.
