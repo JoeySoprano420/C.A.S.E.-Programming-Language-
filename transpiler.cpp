@@ -16,7 +16,7 @@
 #include <condition_variable>
 #include <cstdlib>
 
-#include "intelligence.hpp" // CIAM preprocessor (write_stdout, overlays/inspect, sandbox/audit, base-12)
+#include "Intelligence.hpp" // CIAM preprocessor (write_stdout, overlays/inspect, sandbox/audit, base-12)
 #include "MacroRegistry.hpp" // Macro registry integration
 
 // ------------------------ Lexer ------------------------
