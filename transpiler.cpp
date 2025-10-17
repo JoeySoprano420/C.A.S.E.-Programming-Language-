@@ -17,6 +17,7 @@
 #include <cstdlib>
 
 #include "intelligence.hpp" // CIAM preprocessor (write_stdout, overlays/inspect, sandbox/audit, base-12)
+#include "MacroRegistry.hpp" // [ADDED] Include the macro registry to enable macro persistence/integration
 
 // ------------------------ Lexer ------------------------
 
@@ -998,7 +999,7 @@ static void builtinTextSink(const char* /*phase*/, const char* /*text*/, size_t 
 // Forward declaration for internal optimizer (defined later in this file)
 static void optimize(Node*& root);
 
-// Built-in mutation: evolutionary re-optimization (re-run optimize a few rounds)
+// Built-in mutation: evolutionary re-optimization (re-visit and re-run optimize a few rounds)
 static bool mutateEvolve(Node*& root, const char* passPoint) {
     // Apply extra simplification rounds at known points
     if (std::string(passPoint) == "before-opt" || std::string(passPoint) == "after-opt") {
@@ -1018,6 +1019,9 @@ static void collectOverlaysFlags(Node* n) {
         if (n->value == "inspect") gEnableInspect = true;
         if (n->value == "replay") gEnableReplay = true;
         if (n->value == "audit") gEnableInspect = true;
+
+        // Register overlay-driven macros
+        ciam::emitMacroFromOverlay(n->value);
     }
     if (n->type == "Mutate") gEnableMutate = true;
     for (auto* c : n->children) collectOverlaysFlags(c);
@@ -1477,6 +1481,9 @@ int main(int argc, char** argv) {
     std::string src((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
 
     try {
+        // [ADDED] Load previously persisted macros
+        ciam::MacroRegistry::load();
+
         // Preprocess with CIAM features (enabled only when source contains: call CIAM[on])
         ciam::Preprocessor ciamPre;
         src = ciamPre.Process(src);
@@ -1497,7 +1504,7 @@ int main(int argc, char** argv) {
         Node* ast = parseProgram(tokens);
         emitEventAst("parsed", ast);
 
-        // Collect overlays to enable CIAM-like behaviors
+        // Collect overlays to enable CIAM-like behaviors (also registers overlay macros)
         collectOverlaysFlags(ast);
 
         // Analyze types
@@ -1527,6 +1534,9 @@ int main(int argc, char** argv) {
         }
         out << cpp;
         std::cout << "[OK] Generated compiler.cpp\n";
+
+        // [ADDED] Persist macros after this run (captures overlay-driven or fixer macros)
+        ciam::MacroRegistry::persist();
 
         // Write symbolic replay if enabled
         if (gEnableReplay) {
