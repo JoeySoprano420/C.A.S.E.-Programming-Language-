@@ -17,7 +17,7 @@
 #include <cstdlib>
 
 #include "intelligence.hpp" // CIAM preprocessor (write_stdout, overlays/inspect, sandbox/audit, base-12)
-#include "MacroRegistry.hpp" // [ADDED] Include the macro registry to enable macro persistence/integration
+#include "MacroRegistry.hpp" // Macro registry integration
 
 // ------------------------ Lexer ------------------------
 
@@ -60,6 +60,7 @@ static bool isSymbolChar(char c) {
     case '|':
     case '%':
     case ':':
+    case '?':
     case '.':
         return true;
     default:
@@ -67,8 +68,15 @@ static bool isSymbolChar(char c) {
     }
 }
 
+static void trimInPlace(std::string& s) {
+    auto notspace = [](unsigned char ch){ return !std::isspace(ch); };
+    s.erase(s.begin(), std::find_if(s.begin(), s.end(), notspace));
+    s.erase(std::find_if(s.rbegin(), s.rend(), notspace).base(), s.end());
+}
+
 std::vector<Token> tokenize(const std::string& src) {
     std::vector<Token> tokens;
+    tokens.reserve(src.size() / 2); // heuristic to reduce reallocations
     size_t i = 0;
     int line = 1;
 
@@ -111,7 +119,7 @@ std::vector<Token> tokenize(const std::string& src) {
     auto readSymbol = [&](size_t& idx) {
         // Try to read multi-char operators first
         static const std::unordered_set<std::string> twoChar = {
-            "<=", ">=", "==", "!=", "&&", "||", "+=", "-=", "*=", "/=", "%=", "++", "--"
+            "<=", ">=", "==", "!=", "&&", "||", "+=", "-=", "*=", "/=", "%=", "++", "--", "->", "::", "<<", ">>"
         };
         char c = src[idx];
         std::string one(1, c);
@@ -142,9 +150,9 @@ std::vector<Token> tokenize(const std::string& src) {
             continue;
         }
 
-        // Line comments: // ...
-        if (c == '/' && i + 1 < src.size() && src[i + 1] == '/') {
-            i += 2;
+        // Line comments: // ... or # ...
+        if ((c == '/' && i + 1 < src.size() && src[i + 1] == '/') || c == '#') {
+            if (c == '/') i += 2; else ++i;
             while (i < src.size() && src[i] != '\n') ++i;
             continue;
         }
@@ -217,8 +225,8 @@ std::vector<Token> tokenize(const std::string& src) {
 // ------------------------ AST ------------------------
 
 struct Node {
-    std::string type;           // e.g., Program, Print, Let, Fn, While, ... Scale, Bounds, Checkpoint, VBreak, Channel, Send, Recv, Schedule, Sync
-    std::string value;          // payload (e.g., name, operator, string literal, loop header, label, priority)
+    std::string type;           // e.g., Program, Print, Let, Fn, While, Scale, Bounds, Checkpoint, VBreak, Channel, Send, Recv, Schedule, Sync, Member, Index, Invoke, Ternary
+    std::string value;          // payload (e.g., name, operator, string literal, loop header, label, priority, function name or member name)
     std::vector<Node*> children;// generic children
 };
 
@@ -280,16 +288,19 @@ static void skipBracketBlockIfPresent() {
     }
 }
 
-static Node* parseBlock() {
-    // Expects current token to be '{'
-    if (!matchValue("{")) throw std::runtime_error("Expected '{' to start a block at line " + std::to_string(peek().line));
+// Delimited blocks: support both {...} and (...)
+static Node* parseDelimitedBlock(const std::string& open, const std::string& close) {
+    if (!matchValue(open)) throw std::runtime_error("Expected '" + open + "' to start a block at line " + std::to_string(peek().line));
     Node* body = new Node{ "Body", "" };
-    while (peek().type != TokenType::END && !checkValue("}")) {
+    while (peek().type != TokenType::END && !checkValue(close)) {
         body->children.push_back(parseStatement());
     }
-    if (!matchValue("}")) throw std::runtime_error("Expected '}' to close a block at line " + std::to_string(peek().line));
+    if (!matchValue(close)) throw std::runtime_error("Expected '" + close + "' to close a block at line " + std::to_string(peek().line));
     return body;
 }
+
+static Node* parseBlock()           { return parseDelimitedBlock("{","}"); }
+static Node* parseParenBlock()      { return parseDelimitedBlock("(",")"); }
 
 // Allow Print "..." or Print <expr>
 static Node* parsePrint() {
@@ -309,7 +320,7 @@ static Node* parsePrint() {
 static Node* parseRet() {
     advanceTok(); // 'ret'
     Node* n = new Node{ "Ret", "" };
-    if (peek().type != TokenType::END && !checkValue("[") && !checkValue("}")) {
+    if (peek().type != TokenType::END && !checkValue("[") && !checkValue("}") && !checkValue("]")) {
         Node* expr = parseExpression();
         if (expr) n->children.push_back(expr);
     }
@@ -318,6 +329,21 @@ static Node* parseRet() {
     return n;
 }
 
+// Shared: parse expression argument list inside '(' ... ')'
+static void parseArgList(std::vector<Node*>& args) {
+    if (!matchValue("(")) throw std::runtime_error("Expected '(' starting arguments at line " + std::to_string(peek().line));
+    if (matchValue(")")) return; // empty
+    while (true) {
+        Node* e = parseExpression();
+        if (e) args.push_back(e);
+        if (matchValue(")")) break;
+        if (matchValue(",")) continue;
+        // tolerate whitespace-separated args without comma
+        if (checkValue("]") || checkValue("{") || checkValue("}") || checkType(TokenType::END)) break;
+    }
+}
+
+// Statement-form call
 static Node* parseCall() {
     advanceTok(); // 'call'
     Node* n = new Node{ "Call", "" };
@@ -336,6 +362,25 @@ static Node* parseCall() {
     skipOptionalSemicolon();
     skipBracketBlockIfPresent();
     return n;
+}
+
+// Expression-form call: `call name args...`
+static Node* parseCallExprFromKeyword() {
+    advanceTok(); // 'call'
+    if (peek().type != TokenType::IDENT) throw std::runtime_error("Expected function name after 'call' at line " + std::to_string(peek().line));
+    std::string fname = advanceTok().value;
+    std::vector<Node*> args;
+    while (peek().type != TokenType::END && !checkValue("[") && !checkValue("{") && !checkValue("}")) {
+        if (checkValue(",")) { advanceTok(); continue; }
+        Node* e = parseExpression();
+        if (e) args.push_back(e);
+        if (checkValue(",")) { advanceTok(); continue; }
+        if (checkValue("{") || checkValue("}") || checkValue("[")) break;
+    }
+    Node* c = new Node{"CallExpr", fname};
+    for (auto* a : args) c->children.push_back(a);
+    skipBracketBlockIfPresent();
+    return c;
 }
 
 static Node* parseLet() {
@@ -372,7 +417,6 @@ static Node* parseLoop() {
 static Node* parseIf() {
     advanceTok(); // 'if'
     Node* n = new Node{ "If", "" };
-    // condition expression until '{'
     if (!checkValue("{")) {
         Node* condExpr = parseExpression();
         Node* cond = new Node{"Cond",""};
@@ -614,7 +658,6 @@ static Node* parseRecv() {
 static Node* parseSchedule() {
     advanceTok(); // 'schedule'
     Node* n = new Node{"Schedule",""};
-    // optional numeric priority
     if (checkType(TokenType::NUMBER)) {
         n->value = advanceTok().value;
     } else {
@@ -633,6 +676,36 @@ static Node* parseSync() {
     return new Node{"Sync",""};
 }
 
+static std::vector<std::pair<std::string,std::string>> parseParamListFromStringFragments(const std::vector<std::string>& frags) {
+    // Join all fragments with ',' then split by ','
+    std::string joined;
+    for (size_t i = 0; i < frags.size(); ++i) {
+        if (i) joined += ",";
+        joined += frags[i];
+    }
+    std::vector<std::pair<std::string, std::string>> params;
+    size_t start = 0;
+    while (start < joined.size()) {
+        size_t p = joined.find(',', start);
+        std::string part = joined.substr(start, p == std::string::npos ? std::string::npos : (p - start));
+        trimInPlace(part);
+        if (!part.empty()) {
+            size_t sp = part.find_last_of(" \t");
+            if (sp != std::string::npos) {
+                std::string ty = part.substr(0, sp);
+                std::string nm = part.substr(sp + 1);
+                trimInPlace(ty); trimInPlace(nm);
+                if (!nm.empty()) params.emplace_back(ty, nm);
+            } else {
+                params.emplace_back(std::string("auto"), part);
+            }
+        }
+        if (p == std::string::npos) break;
+        start = p + 1;
+    }
+    return params;
+}
+
 static Node* parseFn() {
     advanceTok(); // 'Fn'
     Node* n = new Node{ "Fn", "" };
@@ -641,6 +714,41 @@ static Node* parseFn() {
     } else {
         throw std::runtime_error("Expected function name after 'Fn' at line " + std::to_string(peek().line));
     }
+
+    // Optional parameters: () or one/more STRING fragments
+    std::vector<std::string> paramStrFrags;
+    bool sawParenParams = false;
+    if (checkValue("(")) {
+        int depth = 0;
+        if (matchValue("(")) {
+            ++depth;
+            while (peek().type != TokenType::END && depth > 0) {
+                if (matchValue("(")) { ++depth; continue; }
+                if (matchValue(")")) { --depth; continue; }
+                advanceTok(); // ignore inside
+            }
+            sawParenParams = true;
+        }
+    } else if (peek().type == TokenType::STRING) {
+        paramStrFrags.push_back(advanceTok().value);
+        while (matchValue(",")) {
+            if (peek().type == TokenType::STRING) paramStrFrags.push_back(advanceTok().value);
+            else break;
+        }
+    }
+
+    if (sawParenParams || !paramStrFrags.empty()) {
+        Node* params = new Node{"Params",""};
+        auto pairs = parseParamListFromStringFragments(paramStrFrags);
+        for (auto& pr : pairs) {
+            Node* p = new Node{"Param", pr.second}; // value=name
+            Node* ty = new Node{"Type", pr.first};
+            p->children.push_back(ty);
+            params->children.push_back(p);
+        }
+        n->children.push_back(params);
+    }
+
     // Attach pending overlays as children (Overlay nodes)
     for (const auto& ov : gPendingOverlays) {
         Node* o = new Node{"Overlay", ov};
@@ -648,14 +756,19 @@ static Node* parseFn() {
     }
     gPendingOverlays.clear();
 
-    // Use braces for function body
-    Node* body = parseBlock();
+    // Function body can be { ... } or ( ... )
+    Node* body = nullptr;
+    if (checkValue("{")) body = parseBlock();
+    else if (checkValue("(")) body = parseParenBlock();
+    else throw std::runtime_error("Expected '{' or '(' to start function body at line " + std::to_string(peek().line));
+
     n->children.push_back(body);
+    skipBracketBlockIfPresent();
     return n;
 }
 
 // ----- Expression parsing (precedence) -----
-//  || : 1, && : 2, == != : 3, < > <= >= : 4, + - : 5, * / % : 6
+//  || : 1, && : 2, == != : 3, < > <= >= : 4, + - : 5, * / % : 6, ?: ternary
 
 static int precedenceOf(const std::string& op) {
     if (op == "||") return 1;
@@ -667,7 +780,39 @@ static int precedenceOf(const std::string& op) {
     return -1;
 }
 
+// Parse an lvalue with postfix chains: var, var[idx], var.member, nested combinations
+static Node* parseLValue() {
+    if (peek().type != TokenType::IDENT) return nullptr;
+    Node* base = new Node{ "Var", advanceTok().value };
+    while (true) {
+        if (checkValue("[")) {
+            advanceTok();
+            Node* idx = parseExpression();
+            if (!matchValue("]")) throw std::runtime_error("Expected ']' in index expression at line " + std::to_string(peek().line));
+            Node* idxNode = new Node{"Index",""};
+            idxNode->children.push_back(base);
+            idxNode->children.push_back(idx);
+            base = idxNode;
+            continue;
+        }
+        if (checkValue(".")) {
+            advanceTok();
+            if (!checkType(TokenType::IDENT)) throw std::runtime_error("Expected member name after '.' at line " + std::to_string(peek().line));
+            std::string member = advanceTok().value;
+            Node* memNode = new Node{"Member", member};
+            memNode->children.push_back(base);
+            base = memNode;
+            continue;
+        }
+        break;
+    }
+    return base;
+}
+
 static Node* parsePrimary() {
+    if (peek().type == TokenType::KEYWORD && peek().value == "call") {
+        return parseCallExprFromKeyword();
+    }
     if (peek().type == TokenType::NUMBER) {
         return new Node{ "Num", advanceTok().value };
     }
@@ -679,7 +824,40 @@ static Node* parsePrimary() {
         return new Node{ "Num", v };
     }
     if (peek().type == TokenType::IDENT) {
-        return new Node{ "Var", advanceTok().value };
+        Node* acc = new Node{ "Var", advanceTok().value };
+        // Postfix chains: calls, indexes, members
+        while (true) {
+            if (checkValue("(")) {
+                std::vector<Node*> args;
+                parseArgList(args);
+                Node* inv = new Node{"Invoke",""};
+                inv->children.push_back(acc); // target expression
+                for (auto* a : args) inv->children.push_back(a);
+                acc = inv;
+                continue;
+            }
+            if (checkValue("[")) {
+                advanceTok();
+                Node* idx = parseExpression();
+                if (!matchValue("]")) throw std::runtime_error("Expected ']' in index at line " + std::to_string(peek().line));
+                Node* idxNode = new Node{"Index",""};
+                idxNode->children.push_back(acc);
+                idxNode->children.push_back(idx);
+                acc = idxNode;
+                continue;
+            }
+            if (checkValue(".")) {
+                advanceTok();
+                if (!checkType(TokenType::IDENT)) throw std::runtime_error("Expected member after '.' at line " + std::to_string(peek().line));
+                std::string member = advanceTok().value;
+                Node* mem = new Node{"Member", member};
+                mem->children.push_back(acc);
+                acc = mem;
+                continue;
+            }
+            break;
+        }
+        return acc;
     }
     if (checkValue("(")) {
         advanceTok(); // (
@@ -704,10 +882,10 @@ static Node* parseUnary() {
 static Node* parseBinOpRHS(int minPrec, Node* lhs) {
     while (true) {
         const Token& t = peek();
-        if (t.type != TokenType::SYMBOL) return lhs;
+        if (t.type != TokenType::SYMBOL) break;
         std::string op = t.value;
         int prec = precedenceOf(op);
-        if (prec < minPrec) return lhs;
+        if (prec < minPrec) break;
 
         advanceTok(); // consume operator
         Node* rhs = parseUnary();
@@ -721,11 +899,24 @@ static Node* parseBinOpRHS(int minPrec, Node* lhs) {
         bin->children.push_back(rhs);
         lhs = bin;
     }
+    return lhs;
 }
 
 static Node* parseExpression() {
     Node* lhs = parseUnary();
-    return parseBinOpRHS(0, lhs);
+    lhs = parseBinOpRHS(0, lhs);
+    // Ternary ?: (lowest precedence, right-associative)
+    if (matchValue("?")) {
+        Node* thenE = parseExpression();
+        if (!matchValue(":")) throw std::runtime_error("Expected ':' in ternary at line " + std::to_string(peek().line));
+        Node* elseE = parseExpression();
+        Node* t = new Node{"Ternary",""};
+        t->children.push_back(lhs);
+        t->children.push_back(thenE);
+        t->children.push_back(elseE);
+        return t;
+    }
+    return lhs;
 }
 
 static Node* parseInput() {
@@ -741,25 +932,25 @@ static bool isAssignOp(const std::string& s) {
 }
 
 static Node* parseAssignmentOrIncDec() {
-    // Prefix ++/-- ident;
+    // Prefix ++/--
     if (peek().type == TokenType::SYMBOL && (checkValue("++") || checkValue("--"))) {
         std::string op = advanceTok().value;
-        if (!checkType(TokenType::IDENT)) throw std::runtime_error("Expected identifier after '" + op + "' at line " + std::to_string(peek().line));
+        Node* lv = parseLValue();
+        if (!lv) throw std::runtime_error("Expected lvalue after '" + op + "' at line " + std::to_string(peek().line));
         Node* n = new Node{"Assign", op};
-        Node* var = new Node{"Var", advanceTok().value};
-        n->children.push_back(var);
+        n->children.push_back(lv);
         skipOptionalSemicolon();
         return n;
     }
-    // ident (op) [expr];
+    // lvalue (op) [expr];
     if (peek().type == TokenType::IDENT) {
-        Token idTok = peek();
-        if (pos + 1 < toks.size() && toks[pos + 1].type == TokenType::SYMBOL && isAssignOp(toks[pos + 1].value)) {
-            advanceTok(); // ident
+        size_t save = pos;
+        Node* lv = parseLValue();
+        if (!lv) return nullptr;
+        if (peek().type == TokenType::SYMBOL && isAssignOp(peek().value)) {
             std::string op = advanceTok().value; // assignment operator
             Node* n = new Node{"Assign", op};
-            Node* var = new Node{"Var", idTok.value};
-            n->children.push_back(var);
+            n->children.push_back(lv);
             if (op != "++" && op != "--") {
                 Node* expr = parseExpression();
                 n->children.push_back(expr);
@@ -767,15 +958,20 @@ static Node* parseAssignmentOrIncDec() {
             skipOptionalSemicolon();
             return n;
         }
-        // Postfix ++/--
-        if (pos + 1 < toks.size() && toks[pos + 1].type == TokenType::SYMBOL && (toks[pos + 1].value == "++" || toks[pos + 1].value == "--")) {
-            std::string name = advanceTok().value; // ident
-            std::string op = advanceTok().value;   // ++/--
-            Node* n = new Node{"Assign", op};
-            Node* var = new Node{"Var", name};
-            n->children.push_back(var);
-            skipOptionalSemicolon();
-            return n;
+        // Postfix ++/-- only for simple identifier (fallback)
+        pos = save; // rollback if not assignment
+        if (peek().type == TokenType::IDENT) {
+            std::string name = advanceTok().value;
+            if (peek().type == TokenType::SYMBOL && (checkValue("++") || checkValue("--"))) {
+                std::string op = advanceTok().value;
+                Node* n = new Node{"Assign", op};
+                Node* var = new Node{"Var", name};
+                n->children.push_back(var);
+                skipOptionalSemicolon();
+                return n;
+            }
+            // rollback complete
+            pos = save;
         }
     }
     return nullptr;
@@ -846,12 +1042,23 @@ static TypeKind inferExpr(Node* e, const std::vector<std::unordered_map<std::str
             auto f = it->find(e->value);
             if (f != it->end()) return f->second;
         }
-        std::cerr << "[warn] use of undefined variable '" << e->value << "'\n";
         return TypeKind::Unknown;
     }
     if (e->type == "Unary") {
-        // '!' or unary '-' => numeric (0/1 or negation)
         return TypeKind::Number;
+    }
+    if (e->type == "CallExpr" || e->type == "Invoke") {
+        return TypeKind::Number;
+    }
+    if (e->type == "Member" || e->type == "Index") {
+        return TypeKind::Unknown;
+    }
+    if (e->type == "Ternary") {
+        TypeKind c1 = inferExpr(e->children[1], scopes);
+        TypeKind c2 = inferExpr(e->children[2], scopes);
+        if (c1 == TypeKind::String || c2 == TypeKind::String) return TypeKind::String;
+        if (c1 == TypeKind::Number || c2 == TypeKind::Number) return TypeKind::Number;
+        return TypeKind::Unknown;
     }
     if (e->type == "BinOp") {
         TypeKind L = inferExpr(e->children[0], scopes);
@@ -872,8 +1079,25 @@ static void analyze(Node* n, std::vector<std::unordered_map<std::string, TypeKin
         scopes.pop_back();
         return;
     }
-    if (n->type == "Fn" || n->type == "If" || n->type == "While" || n->type == "Switch" || n->type == "Schedule") {
-        // visit children (conditions and bodies)
+    if (n->type == "Fn") {
+        scopes.push_back({});
+        // Seed parameters
+        for (auto* ch : n->children) {
+            if (ch->type == "Params") {
+                for (auto* p : ch->children) {
+                    std::string name = p->value;
+                    std::string ty = (!p->children.empty() ? p->children[0]->value : "auto");
+                    TypeKind tk = TypeKind::Number;
+                    if (ty.find("string") != std::string::npos) tk = TypeKind::String;
+                    scopes.back()[name] = tk;
+                }
+            }
+        }
+        for (auto* ch : n->children) if (ch->type == "Body") analyze(ch, scopes);
+        scopes.pop_back();
+        return;
+    }
+    if (n->type == "If" || n->type == "While" || n->type == "Switch" || n->type == "Schedule") {
         for (auto* c : n->children) analyze(c, scopes);
         return;
     }
@@ -883,17 +1107,19 @@ static void analyze(Node* n, std::vector<std::unordered_map<std::string, TypeKin
         scopes.back()[n->value] = t;
     }
     if (n->type == "Assign") {
-        // children: [0]=Var, [1]=expr? (missing for ++/--)
+        // generic lvalue; conservatively mark number when simple var
         if (scopes.empty()) scopes.push_back({});
-        if (n->value == "++" || n->value == "--") {
-            scopes.back()[n->children[0]->value] = TypeKind::Number;
-        } else {
-            TypeKind t = inferExpr(n->children.size() > 1 ? n->children[1] : nullptr, scopes);
-            scopes.back()[n->children[0]->value] = t;
+        Node* lhs = n->children[0];
+        if (lhs && lhs->type == "Var") {
+            if (n->value == "++" || n->value == "--") {
+                scopes.back()[lhs->value] = TypeKind::Number;
+            } else {
+                TypeKind t = inferExpr(n->children.size() > 1 ? n->children[1] : nullptr, scopes);
+                scopes.back()[lhs->value] = t;
+            }
         }
     }
     if (n->type == "Scale" || n->type == "Bounds") {
-        // Expect numeric operands
         for (size_t i = 1; i < n->children.size(); ++i) {
             TypeKind tk = inferExpr(n->children[i], scopes);
             if (tk == TypeKind::String) {
@@ -901,7 +1127,6 @@ static void analyze(Node* n, std::vector<std::unordered_map<std::string, TypeKin
             }
         }
     }
-    // Walk generic children
     for (auto* c : n->children) analyze(c, scopes);
 }
 
@@ -979,7 +1204,6 @@ static void emitEventText(const char* phase, const std::string& text) {
 static void runTransforms(const char* passPoint, Node*& root) {
     if (!gEnableMutate) return;
     for (auto& p : Registry().transforms) {
-        // Run all transforms; pass point allows plugin to branch internally if needed
         if (p.second) {
             bool changed = p.second(root, passPoint);
             (void)changed;
@@ -989,11 +1213,9 @@ static void runTransforms(const char* passPoint, Node*& root) {
 
 // Built-in Introspection sink: no-op (extend to log externally if needed)
 static void builtinAstSink(const char* /*phase*/, const Node* /*root*/) {
-    // Hook for CIAM overlays or external bridges.
 }
 
 static void builtinTextSink(const char* /*phase*/, const char* /*text*/, size_t /*len*/) {
-    // Hook for CIAM overlays or external bridges.
 }
 
 // Forward declaration for internal optimizer (defined later in this file)
@@ -1001,9 +1223,7 @@ static void optimize(Node*& root);
 
 // Built-in mutation: evolutionary re-optimization (re-visit and re-run optimize a few rounds)
 static bool mutateEvolve(Node*& root, const char* passPoint) {
-    // Apply extra simplification rounds at known points
     if (std::string(passPoint) == "before-opt" || std::string(passPoint) == "after-opt") {
-        // very lightweight "evolution": two extra folds and DCE sweeps
         optimize(root);
         optimize(root);
         return true;
@@ -1109,6 +1329,16 @@ static Node* foldBinop(Node* n) {
 
 static Node* fold(Node* n) {
     if (!n) return n;
+    if (n->type == "Ternary") {
+        n->children[0] = fold(n->children[0]);
+        n->children[1] = fold(n->children[1]);
+        n->children[2] = fold(n->children[2]);
+        // if cond is number, pick a branch
+        double c; if (isNum(n->children[0]) && toDouble(n->children[0]->value, c)) {
+            return clone(c != 0 ? n->children[1] : n->children[2]);
+        }
+        return n;
+    }
     if (n->type == "BinOp") return foldBinop(n);
     for (size_t i = 0; i < n->children.size(); ++i) n->children[i] = fold(n->children[i]);
     return n;
@@ -1119,6 +1349,7 @@ static void dce(Node* n) {
     if (n->type == "Body") {
         std::vector<Node*> keep;
         bool seenRet = false;
+        keep.reserve(n->children.size());
         for (auto* ch : n->children) {
             if (seenRet) continue;
             keep.push_back(ch);
@@ -1168,6 +1399,38 @@ static std::string emitExpr(Node* e) {
         std::string rhs = emitExpr(e->children.empty() ? nullptr : e->children[0]);
         return "(" + e->value + rhs + ")";
     }
+    if (e->type == "Member") {
+        // children[0] = base, value=member
+        return "(" + emitExpr(e->children[0]) + "." + e->value + ")";
+    }
+    if (e->type == "Index") {
+        // children[0] = base, children[1] = idx
+        return "(" + emitExpr(e->children[0]) + "[" + emitExpr(e->children[1]) + "]" + ")";
+    }
+    if (e->type == "Invoke") {
+        // children[0] = target expression, then args...
+        std::ostringstream os;
+        os << "(" << emitExpr(e->children[0]) << "(";
+        for (size_t i = 1; i < e->children.size(); ++i) {
+            if (i > 1) os << ", ";
+            os << emitExpr(e->children[i]);
+        }
+        os << "))";
+        return os.str();
+    }
+    if (e->type == "CallExpr") {
+        std::ostringstream os;
+        os << e->value << "(";
+        for (size_t i = 0; i < e->children.size(); ++i) {
+            if (i) os << ", ";
+            os << emitExpr(e->children[i]);
+        }
+        os << ")";
+        return os.str();
+    }
+    if (e->type == "Ternary") {
+        return "(" + emitExpr(e->children[0]) + " ? " + emitExpr(e->children[1]) + " : " + emitExpr(e->children[2]) + ")";
+    }
     if (e->type == "BinOp") {
         std::string lhs = emitExpr(e->children.size() > 0 ? e->children[0] : nullptr);
         std::string rhs = emitExpr(e->children.size() > 1 ? e->children[1] : nullptr);
@@ -1190,6 +1453,7 @@ static void emitPrintChain(std::ostringstream& out, Node* expr) {
     // Stream-print expression; flatten '+' into stream chain
     if (!expr) { out << "std::cout << std::endl;\n"; return; }
     std::vector<Node*> parts;
+    parts.reserve(8);
     std::function<void(Node*)> flatten = [&](Node* e){
         if (!e) return;
         if (e->type == "BinOp" && e->value == "+") { flatten(e->children[0]); flatten(e->children[1]); }
@@ -1206,10 +1470,8 @@ static void emitPrintChain(std::ostringstream& out, Node* expr) {
 }
 
 static std::string toIosMode(const std::string& mode) {
-    // modes: "out", "in", "app", "binary" (combine separated by '|': "out|app")
     if (mode.empty()) return "std::ios::out";
     std::string m = mode;
-    // remove spaces
     m.erase(std::remove_if(m.begin(), m.end(), [](unsigned char ch){ return std::isspace(ch); }), m.end());
     std::ostringstream os;
     bool first = true;
@@ -1238,10 +1500,59 @@ static std::string mkCheckpointLabel(const std::string& name) {
     return lab;
 }
 
+static void processLoopHeaderHints(const std::string& raw, std::string& pragmas, std::string& cleaned) {
+    cleaned = raw;
+    pragmas.clear();
+    auto erase_all = [&](const std::string& pat){
+        size_t pos = 0;
+        while ((pos = cleaned.find(pat, pos)) != std::string::npos) {
+            cleaned.erase(pos, pat.size());
+        }
+    };
+    // @omp
+    if (cleaned.find("@omp") != std::string::npos) {
+        pragmas += "#if defined(_OPENMP)\n#pragma omp parallel for\n#endif\n";
+        erase_all("@omp");
+    }
+    // @vectorize
+    if (cleaned.find("@vectorize") != std::string::npos) {
+        pragmas += "#ifdef __clang__\n#pragma clang loop vectorize(enable)\n#endif\n";
+        pragmas += "#ifdef __GNUC__\n#pragma GCC ivdep\n#endif\n";
+        pragmas += "#ifdef _MSC_VER\n#pragma loop(ivdep)\n#endif\n";
+        erase_all("@vectorize");
+    }
+    // @unroll(N)
+    size_t up = cleaned.find("@unroll(");
+    if (up != std::string::npos) {
+        size_t lp = cleaned.find("(", up);
+        size_t rp = cleaned.find(")", lp);
+        if (lp != std::string::npos && rp != std::string::npos && rp > lp) {
+            std::string n = cleaned.substr(lp + 1, rp - lp - 1);
+            trimInPlace(n);
+            pragmas += "#pragma unroll " + n + "\n";
+            cleaned.erase(up, (rp - up) + 1);
+        } else {
+            erase_all("@unroll");
+        }
+    }
+    trimInPlace(cleaned);
+}
+
+static std::string mapTypeToCpp(const std::string& ty) {
+    std::string low = ty;
+    std::transform(low.begin(), low.end(), low.begin(), [](unsigned char c){ return char(std::tolower(c)); });
+    if (low == "int") return "int";
+    if (low == "double") return "double";
+    if (low == "float") return "float";
+    if (low == "bool") return "bool";
+    if (low.find("string") != std::string::npos) return "std::string";
+    if (low == "auto") return "auto";
+    return "auto";
+}
+
 static void emitScheduler(std::ostringstream& out, Node* scheduleNode) {
     std::string pr = scheduleNode->value.empty() ? "0" : scheduleNode->value;
     out << "{ struct __Task{int pr; std::function<void()> fn;}; std::vector<__Task> __sched;\n";
-    // Collect one block as one task; extendable to multiple
     out << "__sched.push_back(__Task{" << pr << ", [=](){\n";
     if (!scheduleNode->children.empty()) emitChildren(scheduleNode->children[0]->children, out);
     out << "}});\n";
@@ -1291,8 +1602,10 @@ static void emitNode(Node* n, std::ostringstream& out) {
         out << "std::cin >> " << n->value << ";\n";
     }
     else if (n->type == "Loop") {
-        std::string header = n->value;
-        out << "for(" << header << "){\n";
+        std::string header = n->value, pragmas, cleaned;
+        processLoopHeaderHints(header, pragmas, cleaned);
+        if (!pragmas.empty()) out << pragmas;
+        out << "for(" << (cleaned.empty() ? header : cleaned) << "){\n";
         if (!n->children.empty()) emitChildren(n->children[0]->children, out);
         out << "}\n";
     }
@@ -1342,12 +1655,26 @@ static void emitNode(Node* n, std::ostringstream& out) {
     }
     else if (n->type == "Fn") {
         std::vector<std::string> overlays;
+        Node* params = nullptr;
         Node* body = nullptr;
         for (auto* ch : n->children) {
             if (ch->type == "Overlay") overlays.push_back(ch->value);
+            else if (ch->type == "Params") params = ch;
             else if (ch->type == "Body") body = ch;
         }
-        out << "void " << n->value << "(){\n";
+        // Build signature: auto name(<typed params>)
+        out << "auto " << n->value << "(";
+        if (params) {
+            for (size_t i = 0; i < params->children.size(); ++i) {
+                if (i) out << ",";
+                Node* p = params->children[i];
+                std::string name = p->value;
+                std::string ty = (!p->children.empty() ? p->children[0]->value : "auto");
+                out << mapTypeToCpp(ty) << " " << name;
+            }
+        }
+        out << ")";
+        out << "{\n";
         for (const auto& ov : overlays) {
             out << "/* overlay: " << ov << " */\n";
         }
@@ -1395,12 +1722,12 @@ static void emitNode(Node* n, std::ostringstream& out) {
         }
     }
     else if (n->type == "Assign") {
-        std::string name = n->children[0]->value;
+        std::string lhs = emitExpr(n->children[0]);
         if (n->value == "++" || n->value == "--") {
-            out << name << n->value << ";\n";
+            out << lhs << n->value << ";\n";
         } else {
             std::string rhs = n->children.size() > 1 ? emitExpr(n->children[1]) : "0";
-            out << name << " " << n->value << " " << rhs << ";\n";
+            out << lhs << " " << n->value << " " << rhs << ";\n";
         }
     }
     else if (n->type == "Ret") {
@@ -1411,7 +1738,6 @@ static void emitNode(Node* n, std::ostringstream& out) {
         out << "/* mutation requested: " << n->value << " */\n";
     }
     else if (n->type == "Scale") {
-        // children: [0]=Var x, [1]=a, [2]=b, [3]=c, [4]=d
         std::string x = n->children[0]->value;
         std::string a = emitExpr(n->children[1]);
         std::string b = emitExpr(n->children[2]);
@@ -1421,7 +1747,6 @@ static void emitNode(Node* n, std::ostringstream& out) {
             << x << " = (" << c << ") + __t * ((" << d << ") - (" << c << ")); }\n";
     }
     else if (n->type == "Bounds") {
-        // children: [0]=Var x, [1]=min, [2]=max
         std::string x = n->children[0]->value;
         std::string mn = emitExpr(n->children[1]);
         std::string mx = emitExpr(n->children[2]);
@@ -1435,7 +1760,6 @@ static void emitNode(Node* n, std::ostringstream& out) {
         out << "goto " << mkCheckpointLabel(n->value) << ";\n";
     }
     else if (n->type == "Channel") {
-        // value=name, child[0]=type string (e.g., "int")
         std::string ty = n->children[0]->value;
         out << "Channel<" << ty << "> " << n->value << ";\n";
     }
@@ -1462,17 +1786,73 @@ static void emitNode(Node* n, std::ostringstream& out) {
 
 std::string emitCPP(Node* root) {
     std::ostringstream out;
+    out.str().reserve(1 << 20);
     emitNode(root, out);
     return out.str();
 }
 
 // ------------------------ Driver ------------------------
 
+static bool runCmd(const std::string& cmd) {
+    int rc = std::system(cmd.c_str());
+    return rc == 0;
+}
+
+static std::string quote(const std::string& s) {
+#if defined(_WIN32)
+    return "\"" + s + "\"";
+#else
+    return "'" + s + "'";
+#endif
+}
+
+static void tryNativeBuild(const std::string& outExe) {
+    const char* noCompile = std::getenv("CASEC_NO_COMPILE");
+    if (noCompile && std::string(noCompile) == "1") return;
+
+#if defined(_WIN32)
+    // Try clang-cl first
+    std::ostringstream clir;
+    clir << "clang-cl /std:c++14 /O2 /GL /openmp /DNDEBUG /EHsc "
+         << quote("compiler.cpp") << " /link /OUT:" << quote(outExe);
+    if (!runCmd(clir.str())) {
+        // Fallback to clang++
+        std::ostringstream cc;
+        cc << "clang++ -std=c++14 -O3 -flto -march=native -DNDEBUG -fopenmp "
+           << quote("compiler.cpp") << " -o " << quote(outExe);
+        runCmd(cc.str());
+    }
+    // Emit LLVM IR (best effort)
+    std::ostringstream ir;
+    ir << "clang++ -std=c++14 -S -emit-llvm " << quote("compiler.cpp") << " -o " << quote("compiler.ll");
+    runCmd(ir.str());
+#else
+    std::ostringstream ir;
+    ir << "clang++ -std=c++14 -S -emit-llvm " << quote("compiler.cpp") << " -o " << quote("compiler.ll");
+    runCmd(ir.str());
+    std::ostringstream cc;
+    cc << "clang++ -std=c++14 -O3 -flto -march=native -fopenmp -DNDEBUG "
+       << quote("compiler.cpp") << " -o " << quote(outExe);
+    runCmd(cc.str());
+#endif
+}
+
 int main(int argc, char** argv) {
     if (argc < 2) {
-        std::cerr << "Usage: transpiler <input.case>\n";
+        std::cerr << "Usage: transpiler <input.case> [-o out_exe]\n";
         return 1;
     }
+    std::string outExe = "program.exe";
+#if !defined(_WIN32)
+    outExe = "program.out";
+#endif
+    for (int i = 2; i < argc; ++i) {
+        std::string a = argv[i];
+        if (a == "-o" && i + 1 < argc) {
+            outExe = argv[++i];
+        }
+    }
+
     std::ifstream f(argv[1], std::ios::binary);
     if (!f) {
         std::cerr << "Failed to open input file: " << argv[1] << "\n";
@@ -1481,7 +1861,7 @@ int main(int argc, char** argv) {
     std::string src((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
 
     try {
-        // [ADDED] Load previously persisted macros
+        // Load previously persisted macros
         ciam::MacroRegistry::load();
 
         // Preprocess with CIAM features (enabled only when source contains: call CIAM[on])
@@ -1494,7 +1874,6 @@ int main(int argc, char** argv) {
         // Lex
         auto tokens = tokenize(src);
         {
-            // tokens snapshot as a single-line summary
             std::ostringstream ts;
             ts << "tokens=" << tokens.size();
             emitEventText("tokens", ts.str());
@@ -1535,8 +1914,11 @@ int main(int argc, char** argv) {
         out << cpp;
         std::cout << "[OK] Generated compiler.cpp\n";
 
-        // [ADDED] Persist macros after this run (captures overlay-driven or fixer macros)
+        // Persist macros after this run (captures overlay-driven or fixer macros)
         ciam::MacroRegistry::persist();
+
+        // Attempt native build with aggressive flags (best-effort; optional)
+        tryNativeBuild(outExe);
 
         // Write symbolic replay if enabled
         if (gEnableReplay) {
