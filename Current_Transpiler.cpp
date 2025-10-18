@@ -15822,3 +15822,34 @@ else if (n->type == "Derivative") {
                                             // Before: out << "return 0;\n}\n";
                                             if (gOverlayNcurses) { out << "termui::shutdown();\n"; }
 
+#if 0
+// Compiler.cpp - Single translation unit for a CASE Programming Language -> C++ transpiler (C++14)
+#include <cctype>
+#include <fstream>
+#include <iostream>
+#include <sstream>
+#include <stdexcept>
+#include <string>
+#include <vector>
+#include <algorithm>
+#include <functional>
+#include <unordered_map>
+#include <unordered_set>
+#include <deque>
+#include <mutex>
+#include <condition_variable>
+#include <cstdlib> // strtod
+
+// Robust CIAM include (case-insensitive fallback + no-op shim)
+#if defined(__has_include)
+#  if __has_include("intelligence.hpp")
+#    include "intelligence.hpp"
+#  elif __has_include("Intelligence.hpp")
+#    include "Intelligence.hpp"
+#  else
+namespace ciam { struct Preprocessor { std::string Process(const std::string& s){ return s; } }; }
+#  endif
+#else
+#  include "intelligence.hpp"
+#endif
+#endif // disabled duplicate pipelines
