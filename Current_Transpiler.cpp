@@ -13517,3 +13517,403 @@ else if (n->type == "Derivative") {
                                                 // channel template unchanged...
                                             }
 
+                                            // ciam_registry.hpp
+#pragma once
+#include <functional>
+#include <string>
+#include <unordered_map>
+
+                                            namespace ciam {
+
+                                                struct OverlayContext {
+                                                    std::string funcName;
+                                                    std::string overlayName;
+                                                    int line;
+                                                    std::string file;
+                                                };
+
+                                                using PlaceholderFn = std::function<std::string(const OverlayContext&)>;
+
+                                                class PlaceholderRegistry {
+                                                public:
+                                                    static void registerPlaceholder(const std::string& key, PlaceholderFn fn);
+                                                    static std::string resolve(const std::string& key, const OverlayContext& ctx);
+
+                                                private:
+                                                    static std::unordered_map<std::string, PlaceholderFn>& table();
+                                                };
+
+                                            } // namespace ciam
+
+// ciam_registry.cpp
+#include "ciam_registry.hpp"
+
+                                            namespace ciam {
+
+                                                static std::unordered_map<std::string, PlaceholderFn> registry;
+
+                                                void PlaceholderRegistry::registerPlaceholder(const std::string& key, PlaceholderFn fn) {
+                                                    registry[key] = std::move(fn);
+                                                }
+
+                                                std::string PlaceholderRegistry::resolve(const std::string& key, const OverlayContext& ctx) {
+                                                    auto it = registry.find(key);
+                                                    return (it != registry.end()) ? it->second(ctx) : "${" + key + "}";
+                                                }
+
+                                                std::unordered_map<std::string, PlaceholderFn>& PlaceholderRegistry::table() {
+                                                    return registry;
+                                                }
+
+                                            } // namespace ciam
+
+
+                                            ciam_ext_system.cpp
+
+
+#include "ciam_registry.hpp"
+#include <sstream>
+#include <thread>
+#include <chrono>
+#include <cstdlib>
+
+#ifdef _WIN32
+#define SYS_OS "Windows"
+#elif __APPLE__
+#define SYS_OS "macOS"
+#elif __linux__
+#define SYS_OS "Linux"
+#else
+#define SYS_OS "UnknownOS"
+#endif
+
+#if defined(__x86_64__) || defined(_M_X64)
+#define SYS_ARCH "x86_64"
+#elif defined(__aarch64__)
+#define SYS_ARCH "ARM64"
+#else
+#define SYS_ARCH "UnknownArch"
+#endif
+
+                                                namespace {
+
+                                                std::string currentCompiler() {
+#ifdef __clang__
+                                                    return "Clang";
+#elif defined(__GNUC__)
+                                                    return "GCC";
+#elif defined(_MSC_VER)
+                                                    return "MSVC";
+#else
+                                                    return "UnknownCompiler";
+#endif
+                                                }
+
+                                                std::string currentCPUCount() {
+                                                    unsigned int n = std::thread::hardware_concurrency();
+                                                    return std::to_string(n ? n : 1);
+                                                }
+
+                                                void registerSystemPlaceholders() {
+                                                    using namespace ciam;
+
+                                                    PlaceholderRegistry::registerPlaceholder("OS", [](const OverlayContext&) {
+                                                        return '"' + std::string(SYS_OS) + '"';
+                                                        });
+
+                                                    PlaceholderRegistry::registerPlaceholder("ARCH", [](const OverlayContext&) {
+                                                        return '"' + std::string(SYS_ARCH) + '"';
+                                                        });
+
+                                                    PlaceholderRegistry::registerPlaceholder("CPU", [](const OverlayContext&) {
+                                                        return currentCPUCount();
+                                                        });
+
+                                                    PlaceholderRegistry::registerPlaceholder("COMPILER", [](const OverlayContext&) {
+                                                        return '"' + currentCompiler() + '"';
+                                                        });
+                                                }
+
+                                                // Auto-run on program start
+                                                struct AutoInit {
+                                                    AutoInit() { registerSystemPlaceholders(); }
+                                                } _autoInit;
+
+                                            } // anonymous namespace
+
+
+// ciam_plugin_loader.hpp
+#pragma once
+#include <string>
+
+                                            namespace ciam {
+                                                // Load one plugin (shared library) from disk.
+                                                bool loadPlugin(const std::string& path);
+
+                                                // Load all plugins from a directory (non-recursive).
+                                                void loadPluginsFromDir(const std::string& directory);
+                                            }
+
+
+#include "ciam_plugin_loader.hpp"
+#include <filesystem>
+#include <iostream>
+
+#if defined(_WIN32)
+#include <windows.h>
+#define OPEN_LIB(name)   LoadLibraryA(name)
+#define GET_SYM(handle,sym) GetProcAddress((HMODULE)handle, sym)
+#define CLOSE_LIB(handle)   FreeLibrary((HMODULE)handle)
+#else
+#include <dlfcn.h>
+#define OPEN_LIB(name)   dlopen(name, RTLD_NOW)
+#define GET_SYM(handle,sym) dlsym(handle, sym)
+#define CLOSE_LIB(handle)   dlclose(handle)
+#endif
+
+                                            namespace ciam {
+
+                                                using InitFn = void(*)();        // every plugin must export this symbol
+
+                                                bool loadPlugin(const std::string& path) {
+                                                    void* handle = OPEN_LIB(path.c_str());
+                                                    if (!handle) {
+                                                        std::cerr << "[CIAM] Could not open " << path << std::endl;
+                                                        return false;
+                                                    }
+                                                    auto init = reinterpret_cast<InitFn>(GET_SYM(handle, "ciam_register"));
+                                                    if (init) {
+                                                        init();
+                                                        std::cout << "[CIAM] Loaded plugin " << path << std::endl;
+                                                        return true;
+                                                    }
+                                                    std::cerr << "[CIAM] " << path << " missing symbol ciam_register" << std::endl;
+                                                    CLOSE_LIB(handle);
+                                                    return false;
+                                                }
+
+                                                void loadPluginsFromDir(const std::string& dir) {
+                                                    namespace fs = std::filesystem;
+                                                    for (auto& entry : fs::directory_iterator(dir)) {
+                                                        const auto& p = entry.path();
+                                                        if (!entry.is_regular_file()) continue;
+#if defined(_WIN32)
+                                                        if (p.extension() == ".dll")
+#elif defined(__APPLE__)
+                                                        if (p.extension() == ".dylib")
+#else
+                                                        if (p.extension() == ".so")
+#endif
+                                                            loadPlugin(p.string());
+                                                    }
+                                                }
+
+                                            } // namespace ciam
+
+
+#include "ciam_plugin_loader.hpp"
+
+                                            int main(int argc, char** argv) {
+                                                // 1️⃣  Load built-in CIAM placeholders
+                                                loadCoreCIAMRegistry();
+
+                                                // 2️⃣  Discover external plugin modules
+                                                ciam::loadPluginsFromDir("plugins");
+
+                                                // 3️⃣  Continue with normal transpilation
+                                                runTranspiler(argc, argv);
+                                            }
+
+
+                                            // ciam_plugin_manifest.hpp
+#pragma once
+#include <string>
+#include <unordered_map>
+
+                                            namespace ciam {
+                                                struct PluginManifest {
+                                                    std::string id, name, version, author, description;
+                                                    std::vector<std::string> placeholders;
+                                                };
+
+                                                PluginManifest readManifest(const std::string& path);
+                                                void printManifestSummary(const PluginManifest& m);
+                                            }
+
+
+                                            // ciam_plugin_manifest.cpp
+#include "ciam_plugin_manifest.hpp"
+#include <fstream>
+#include <iostream>
+#include <sstream>
+#include <algorithm>
+
+                                            namespace ciam {
+
+                                                PluginManifest readManifest(const std::string& path) {
+                                                    PluginManifest m;
+                                                    std::ifstream in(path);
+                                                    if (!in) return m;
+
+                                                    std::string key, val;
+                                                    while (in >> key) {
+                                                        std::getline(in, val);
+                                                        if (!val.empty() && val[0] == ' ') val.erase(0, 1);
+                                                        if (key == "NAME")        m.name = val;
+                                                        else if (key == "ID")     m.id = val;
+                                                        else if (key == "VERSION")m.version = val;
+                                                        else if (key == "AUTHOR") m.author = val;
+                                                        else if (key == "DESCRIPTION") m.description = val;
+                                                        else if (key == "PLACEHOLDERS") {
+                                                            std::stringstream ss(val);
+                                                            std::string tok;
+                                                            while (std::getline(ss, tok, ',')) {
+                                                                tok.erase(remove_if(tok.begin(), tok.end(), ::isspace), tok.end());
+                                                                if (!tok.empty()) m.placeholders.push_back(tok);
+                                                            }
+                                                        }
+                                                    }
+                                                    return m;
+                                                }
+
+                                                void printManifestSummary(const PluginManifest& m) {
+                                                    std::cout << "▶ " << (m.name.empty() ? m.id : m.name)
+                                                        << " v" << (m.version.empty() ? "?" : m.version)
+                                                        << "  by " << (m.author.empty() ? "unknown" : m.author) << "\n";
+                                                    if (!m.placeholders.empty()) {
+                                                        std::cout << "   Exports: ";
+                                                        for (size_t i = 0; i < m.placeholders.size(); ++i) {
+                                                            std::cout << "${" << m.placeholders[i] << "}";
+                                                            if (i + 1 < m.placeholders.size()) std::cout << ", ";
+                                                        }
+                                                        std::cout << "\n";
+                                                    }
+                                                }
+
+                                            } // namespace ciam
+
+
+											(u == "ms" || u == "milliseconds") ? "std::chrono::milliseconds" :
+												(u == "s" || u == "sec" || u == "seconds") ? "std::chrono::seconds" :
+												(u == "m" || u == "min" || u == "minutes") ? "std::chrono::minutes" :
+												(u == "h" || u == "hour" || u == "hours") ? "std::chrono::hours" : "std::chrono::milliseconds";
+                                            out << "{ using namespace std::chrono; auto __dur_val = " << emitExpr(n->children[0]) << "; "
+												<< chronoUnit << " __dur = duration_cast<" << chronoUnit << ">(duration<double>(__dur_val)); (void)__dur; }\n";
+
+#include "ciam_plugin_manifest.hpp"
+
+                                            void loadPluginsFromDir(const std::string& dir) {
+                                                namespace fs = std::filesystem;
+                                                for (auto& entry : fs::directory_iterator(dir)) {
+                                                    const auto& p = entry.path();
+                                                    if (!entry.is_regular_file()) continue;
+
+#if defined(_WIN32)
+                                                    bool islib = (p.extension() == ".dll");
+#elif defined(__APPLE__)
+                                                    bool islib = (p.extension() == ".dylib");
+#else
+                                                    bool islib = (p.extension() == ".so");
+#endif
+                                                    if (!islib) continue;
+
+                                                    // look for matching manifest
+                                                    std::string manifestPath = p;
+                                                    manifestPath.replace(manifestPath.find_last_of('.'), std::string::npos, ".caseinfo");
+                                                    if (fs::exists(manifestPath)) {
+                                                        auto m = ciam::readManifest(manifestPath);
+                                                        ciam::printManifestSummary(m);
+                                                    }
+
+                                                    loadPlugin(p.string());
+                                                }
+                                            }
+
+											} // namespace ciam
+
+                                            if (argc >= 2 && std::string(argv[1]) == "list-plugins") {
+                                                ciam::loadPluginsFromDir("plugins");
+                                                return 0;
+                                            }
+
+
+                                            // cmod_pack.cpp
+#include <filesystem>
+#include <iostream>
+#include <fstream>
+#include <cstdlib>
+
+                                            namespace fs = std::filesystem;
+
+                                            int main(int argc, char** argv) {
+                                                if (argc < 3) {
+                                                    std::cout << "Usage: cmod pack <plugin_dir>\n";
+                                                    return 0;
+                                                }
+                                                fs::path src = argv[2];
+                                                fs::path out = src.filename().string() + ".cmod";
+
+                                                std::string cmd =
+                                                    "zip -r " + out.string() + " " +
+                                                    (fs::is_directory(src) ? src.string() : ".");
+                                                std::system(cmd.c_str());
+                                                std::cout << "Created " << out << "\n";
+                                            }
+
+
+#include <filesystem>
+#include <iostream>
+#include <cstdlib>
+
+                                            namespace fs = std::filesystem;
+
+                                            int installCmod(const std::string& path) {
+                                                if (!fs::exists(path)) {
+                                                    std::cerr << "File not found: " << path << "\n";
+                                                    return 1;
+                                                }
+
+                                                fs::path pluginDir = "plugins";
+                                                fs::create_directories(pluginDir);
+
+                                                // unzip
+                                                std::string cmd = "unzip -o " + path + " -d " + pluginDir.string();
+                                                if (std::system(cmd.c_str()) != 0) {
+                                                    std::cerr << "Failed to unpack " << path << "\n";
+                                                    return 1;
+                                                }
+
+                                                std::cout << "[CIAM] Installed " << path << " to " << pluginDir << "\n";
+                                                return 0;
+                                            }
+
+                                            if (argc >= 3 && std::string(argv[1]) == "install")
+                                                return installCmod(argv[2]);
+
+
+                                            void installCmod(const std::string& path) {
+                                                namespace fs = std::filesystem;
+                                                fs::create_directories("plugins");
+                                                fs::create_directories("themes");
+                                                fs::create_directories("overlays");
+                                                fs::create_directories("snippets");
+
+                                                std::string unzip = "unzip -o " + path + " -d temp_install";
+                                                if (std::system(unzip.c_str()) != 0) {
+                                                    std::cerr << "Failed to extract " << path << "\n"; return;
+                                                }
+
+                                                // Move contents by folder
+                                                for (auto& entry : fs::directory_iterator("temp_install")) {
+                                                    auto name = entry.path().filename().string();
+                                                    if (name == "lib") fs::copy(entry, "plugins", fs::copy_options::recursive | fs::copy_options::overwrite_existing);
+                                                    else if (name == "themes") fs::copy(entry, "themes", fs::copy_options::recursive | fs::copy_options::overwrite_existing);
+                                                    else if (name == "overlays") fs::copy(entry, "overlays", fs::copy_options::recursive | fs::copy_options::overwrite_existing);
+                                                    else if (name == "snippets") fs::copy(entry, "snippets", fs::copy_options::recursive | fs::copy_options::overwrite_existing);
+                                                    else if (name == "doc") fs::copy(entry, "plugins/docs", fs::copy_options::recursive | fs::copy_options::overwrite_existing);
+                                                }
+                                                fs::remove_all("temp_install");
+                                                std::cout << "[CIAM] Installed extended module " << path << "\n";
+                                            }
+
+
