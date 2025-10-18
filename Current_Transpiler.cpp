@@ -14332,3 +14332,1319 @@ else if (n->type == "Derivative") {
                                                 return out.str();
                                             }
 
+                                            // ===========================================================
+                                            // CURRENT_TRANSPILER++ : Enhanced CASE → C++ Transpiler
+                                            // ===========================================================
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <string>
+#include <map>
+#include <vector>
+#include <stdexcept>
+
+                                            struct Node {
+                                                std::string kind;
+                                                std::string value;
+                                                std::vector<Node*> children;
+                                            };
+
+                                            class Transpiler {
+                                            private:
+                                                std::ostringstream output;
+                                                int indentLevel = 0;
+                                                std::map<std::string, std::string> typeMap;
+
+                                            public:
+                                                Transpiler() {
+                                                    typeMap["int"] = "int";
+                                                    typeMap["float"] = "double";
+                                                    typeMap["str"] = "std::string";
+                                                    typeMap["bool"] = "bool";
+                                                    typeMap["void"] = "void";
+                                                }
+
+                                                std::string transpile(Node* root) {
+                                                    transpileNode(root);
+                                                    return output.str();
+                                                }
+
+                                            private:
+                                                void emit(const std::string& code, bool newline = true) {
+                                                    for (int i = 0; i < indentLevel; ++i) output << "    ";
+                                                    output << code;
+                                                    if (newline) output << "\n";
+                                                }
+
+                                                // ================================================
+                                                // Main Dispatch
+                                                // ================================================
+                                                void transpileNode(Node* node) {
+                                                    if (!node) return;
+
+                                                    if (node->kind == "Program") {
+                                                        for (auto* child : node->children) transpileNode(child);
+                                                    }
+                                                    else if (node->kind == "FunctionDef") emitFunction(node);
+                                                    else if (node->kind == "If") emitIf(node);
+                                                    else if (node->kind == "While") emitWhile(node);
+                                                    else if (node->kind == "For") emitFor(node);
+                                                    else if (node->kind == "Print") emitPrint(node);
+                                                    else if (node->kind == "Return") emitReturn(node);
+                                                    else if (node->kind == "BinOp") emitBinOp(node);
+                                                    else if (node->kind == "Assignment") emitAssignment(node);
+                                                    else {
+                                                        emit("// TODO: Unhandled node kind: " + node->kind);
+                                                    }
+                                                }
+
+                                                // ================================================
+                                                // Emitters for Each Node Type
+                                                // ================================================
+                                                void emitFunction(Node* node) {
+                                                    std::string retType = mapType(node->value);
+                                                    std::string funcName = node->children[0]->value;
+
+                                                    emit(retType + " " + funcName + "(");
+                                                    // Parameters
+                                                    for (size_t i = 1; i < node->children.size() - 1; ++i) {
+                                                        Node* param = node->children[i];
+                                                        emitParam(param, (i < node->children.size() - 2) ? ", " : "");
+                                                    }
+                                                    output << ") {\n";
+                                                    indentLevel++;
+                                                    transpileNode(node->children.back()); // function body
+                                                    indentLevel--;
+                                                    emit("}");
+                                                }
+
+                                                void emitParam(Node* param, const std::string& suffix) {
+                                                    std::string pType = mapType(param->kind);
+                                                    std::string pName = param->value;
+                                                    output << pType << " " << pName << suffix;
+                                                }
+
+                                                void emitIf(Node* node) {
+                                                    emit("if (" + transpileExpr(node->children[0]) + ") {");
+                                                    indentLevel++;
+                                                    transpileNode(node->children[1]);
+                                                    indentLevel--;
+                                                    emit("}");
+                                                    if (node->children.size() == 3) {
+                                                        emit("else {");
+                                                        indentLevel++;
+                                                        transpileNode(node->children[2]);
+                                                        indentLevel--;
+                                                        emit("}");
+                                                    }
+                                                }
+
+                                                void emitWhile(Node* node) {
+                                                    emit("while (" + transpileExpr(node->children[0]) + ") {");
+                                                    indentLevel++;
+                                                    transpileNode(node->children[1]);
+                                                    indentLevel--;
+                                                    emit("}");
+                                                }
+
+                                                void emitFor(Node* node) {
+                                                    std::string init = transpileExpr(node->children[0]);
+                                                    std::string cond = transpileExpr(node->children[1]);
+                                                    std::string iter = transpileExpr(node->children[2]);
+                                                    emit("for (" + init + "; " + cond + "; " + iter + ") {");
+                                                    indentLevel++;
+                                                    transpileNode(node->children[3]);
+                                                    indentLevel--;
+                                                    emit("}");
+                                                }
+
+                                                void emitPrint(Node* node) {
+                                                    output << "std::cout << ";
+                                                    for (size_t i = 0; i < node->children.size(); ++i) {
+                                                        output << transpileExpr(node->children[i]);
+                                                        if (i < node->children.size() - 1)
+                                                            output << " << ";
+                                                    }
+                                                    output << " << std::endl;\n";
+                                                }
+
+                                                void emitReturn(Node* node) {
+                                                    emit("return " + transpileExpr(node->children[0]) + ";");
+                                                }
+
+                                                void emitAssignment(Node* node) {
+                                                    emit(node->children[0]->value + " = " + transpileExpr(node->children[1]) + ";");
+                                                }
+
+                                                void emitBinOp(Node* node) {
+                                                    emit(transpileExpr(node) + ";");
+                                                }
+
+                                                // ================================================
+                                                // Expression Helper
+                                                // ================================================
+                                                std::string transpileExpr(Node* node) {
+                                                    if (node->kind == "Literal" || node->kind == "Identifier")
+                                                        return node->value;
+
+                                                    if (node->kind == "BinOp")
+                                                        return "(" + transpileExpr(node->children[0]) + " " + node->value + " " + transpileExpr(node->children[1]) + ")";
+
+                                                    return "/*expr:" + node->kind + "*/";
+                                                }
+
+                                                // ================================================
+                                                // Utility Functions
+                                                // ================================================
+                                                std::string mapType(const std::string& t) {
+                                                    if (typeMap.count(t)) return typeMap[t];
+                                                    return "auto";
+                                                }
+                                            };
+
+                                            // --------------- Add near top includes (kept) -----------------
+                                            // No change needed here
+
+                                            // --------------- Add after isSymbolChar(...) ------------------
+                                            // Multi-char operator reader and keyword expansion for richer grammar
+                                            static std::string readSymbolToken(const std::string& src, size_t& idx) {
+                                                static const std::unordered_set<std::string> twoChar = {
+                                                    "<=", ">=", "==", "!=", "&&", "||",
+                                                    "+=", "-=", "*=", "/=", "%=",
+                                                    "++", "--", "->", "::", "<<", ">>",
+                                                    "<<=", ">>=", "&=", "|=", "^="
+                                                };
+                                                char c = src[idx];
+                                                std::string one(1, c);
+                                                if (idx + 1 < src.size()) {
+                                                    std::string two = one + src[idx + 1];
+                                                    if (twoChar.count(two)) { idx += 2; return two; }
+                                                }
+                                                ++idx;
+                                                return one;
+                                            }
+
+                                            // --------------- Replace symbol tokenization in tokenize(...) ---------------
+                                            // Find the "Symbols (single char)" block and replace it with:
+                                                    // Symbols (support multi-char first)
+                                            if (isSymbolChar(c)) {
+                                                std::string sym = readSymbolToken(src, i);
+                                                push(TokenType::SYMBOL, sym);
+                                                continue;
+                                            }
+
+                                            // --------------- Expand keyword set in tokenize(...) ------------------------
+                                            // Find the isKeyword lambda in the first tokenize() and replace with:
+                                            auto isKeyword = [](const std::string& s) {
+                                                return s == "Print" || s == "ret" || s == "return" || s == "loop" || s == "if" ||
+                                                    s == "else" || s == "Fn" || s == "call" || s == "let" ||
+                                                    s == "while" || s == "break" || s == "continue" ||
+                                                    s == "switch" || s == "case" || s == "default" ||
+                                                    s == "overlay" || s == "open" || s == "write" || s == "writeln" ||
+                                                    s == "read" || s == "close" || s == "mutate" ||
+                                                    s == "scale" || s == "bounds" || s == "checkpoint" || s == "vbreak" ||
+                                                    s == "channel" || s == "send" || s == "recv" || s == "sync" ||
+                                                    s == "schedule" || s == "input" || s == "true" || s == "false";
+                                                };
+
+                                            // --------------- Add after Parser fwd decls in the first pipeline -----------
+
+                                            // Simple type info + symbol table storage classification
+                                            struct SymInfo {
+                                                std::string type;     // "int", "double", "std::string", "auto"
+                                                std::string storage;  // "", "param", "local", "field", "global"
+                                            };
+
+                                            class ScopeStack {
+                                            public:
+                                                void push() { scopes_.emplace_back(); }
+                                                void pop() { if (!scopes_.empty()) scopes_.pop_back(); }
+                                                void declare(const std::string& name, const SymInfo& si) {
+                                                    if (scopes_.empty()) scopes_.emplace_back();
+                                                    scopes_.back()[name] = si;
+                                                }
+                                                bool lookup(const std::string& name, SymInfo& out) const {
+                                                    for (auto it = scopes_.rbegin(); it != scopes_.rend(); ++it) {
+                                                        auto f = it->find(name);
+                                                        if (f != it->end()) { out = f->second; return true; }
+                                                    }
+                                                    return false;
+                                                }
+                                            private:
+                                                std::vector<std::unordered_map<std::string, SymInfo>> scopes_;
+                                            };
+
+                                            // Global scope stack used by emitter (best-effort; analyzer seeds it)
+                                            static ScopeStack gScopes;
+
+                                            // Type mapping utility
+                                            static std::string mapTypeToCpp(const std::string& ty) {
+                                                std::string low = ty;
+                                                std::transform(low.begin(), low.end(), low.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+                                                if (low == "void")   return "void";
+                                                if (low == "bool")   return "bool";
+                                                if (low == "int")    return "int";
+                                                if (low == "float")  return "float";
+                                                if (low == "double") return "double";
+                                                if (low.find("string") != std::string::npos) return "std::string";
+                                                if (low == "auto" || low.empty()) return "auto";
+                                                // Fallback to user-specified type token
+                                                return ty;
+                                            }
+
+                                            // Diagnostic logger for unsupported nodes
+                                            static void logUnsupported(const Node* n, const char* where) {
+                                                std::cerr << "[emit] unsupported node '" << (n ? n->type : "<null>") << "' at " << (where ? where : "") << "\n";
+                                            }
+
+                                            // --------------- Add Assignment/Input parsing in first pipeline -------------
+                                            // Place with other parser helpers (first pipeline)
+
+                                            static bool isAssignOpTok(const std::string& op) {
+                                                return op == "=" || op == "+=" || op == "-=" || op == "*=" || op == "/=" || op == "%=" || op == "++" || op == "--";
+                                            }
+
+                                            // Minimal lvalue: IDENT only (first pipeline)
+                                            static Node* parseSimpleLValue() {
+                                                if (peek().type != TokenType::IDENT) return nullptr;
+                                                return new Node{ "Var", advanceTok().value };
+                                            }
+
+                                            static Node* parseAssignmentOrIncDec() {
+                                                // prefix ++/--
+                                                if (peek().type == TokenType::SYMBOL && (checkValue("++") || checkValue("--"))) {
+                                                    std::string op = advanceTok().value;
+                                                    Node* lv = parseSimpleLValue();
+                                                    if (!lv) throw std::runtime_error("Expected lvalue after '" + op + "' at line " + std::to_string(peek().line));
+                                                    Node* n = new Node{ "Assign", op };
+                                                    n->children.push_back(lv);
+                                                    return n;
+                                                }
+                                                if (peek().type != TokenType::IDENT) return nullptr;
+                                                size_t save = pos;
+                                                Node* lv = parseSimpleLValue();
+                                                if (!lv) return nullptr;
+                                                if (peek().type == TokenType::SYMBOL && isAssignOpTok(peek().value)) {
+                                                    std::string op = advanceTok().value;
+                                                    Node* n = new Node{ "Assign", op };
+                                                    n->children.push_back(lv);
+                                                    if (op != "++" && op != "--") {
+                                                        Node* rhs = parseExpression();
+                                                        n->children.push_back(rhs);
+                                                    }
+                                                    return n;
+                                                }
+                                                pos = save;
+                                                return nullptr;
+                                            }
+
+                                            static Node* parseInput() {
+                                                advanceTok(); // 'input'
+                                                if (peek().type != TokenType::IDENT) throw std::runtime_error("Expected identifier after 'input' at line " + std::to_string(peek().line));
+                                                Node* n = new Node{ "Input", advanceTok().value };
+                                                return n;
+                                            }
+
+                                            // --------------- Hook into first pipeline parseStatement() ------------------
+                                            // Find the first parseStatement() and add at top:
+                                                // Assignment and inc/dec
+                                            if (peek().type == TokenType::SYMBOL || peek().type == TokenType::IDENT) {
+                                                if (Node* asn = parseAssignmentOrIncDec()) return asn;
+                                            }
+                                            // And add the input handler among keyword checks:
+                                            if (v == "input")    return parseInput();
+
+                                            // --------------- Indentation helpers and function emitters -----------------
+
+                                            static void emitIndent(std::ostringstream& out, int depth) {
+                                                for (int i = 0; i < depth; ++i) out << ' ';
+                                            }
+
+                                            static std::string emitExprExpanded(Node* e); // fwd
+
+                                            // Richer emitExpr for expanded operators is not strictly needed (operators are emitted as-is),
+                                            // but we keep this alias to grow in one place.
+                                            static std::string emitExprExpanded(Node* e) {
+                                                return emitExpr(e);
+                                            }
+
+                                            // Emits function definition with optional params and return type if present
+                                            static void emitFunctionDef(Node* fn, std::ostringstream& out, int depth) {
+                                                // Discover params and return type if this AST carries them; otherwise default
+                                                Node* params = nullptr; Node* body = nullptr; std::string ret = "void";
+                                                for (auto* ch : fn->children) {
+                                                    if (ch->type == "Params") params = ch;
+                                                    else if (ch->type == "Body") body = ch;
+                                                    else if (ch->type == "ReturnType") ret = ch->value;
+                                                }
+                                                emitIndent(out, depth);
+                                                out << mapTypeToCpp(ret) << " " << fn->value << "(";
+                                                if (params) {
+                                                    for (size_t i = 0; i < params->children.size(); ++i) {
+                                                        if (i) out << ", ";
+                                                        Node* p = params->children[i];
+                                                        std::string nm = p->value;
+                                                        std::string ty = (!p->children.empty() ? p->children[0]->value : "auto");
+                                                        out << mapTypeToCpp(ty) << " " << nm;
+                                                        // seed symbol table (best effort)
+                                                        gScopes.declare(nm, SymInfo{ mapTypeToCpp(ty), "param" });
+                                                    }
+                                                }
+                                                out << ") {\n";
+                                                if (body) {
+                                                    for (auto* stmt : body->children) {
+                                                        // statements emitted with +2 spaces indentation
+                                                    }
+                                                }
+                                                // body emitted in dispatcher to keep single path
+                                            }
+
+                                            // Emits a function call: supports Call, CallExpr, and simple Invoke lowering
+                                            static void emitFunctionCall(Node* call, std::ostringstream& out, int depth) {
+                                                emitIndent(out, depth);
+                                                if (call->type == "Call") {
+                                                    out << call->value << "(";
+                                                    for (size_t i = 0; i < call->children.size(); ++i) {
+                                                        if (i) out << ", ";
+                                                        out << emitExprExpanded(call->children[i]);
+                                                    }
+                                                    out << ");\n";
+                                                    return;
+                                                }
+                                                if (call->type == "CallExpr") {
+                                                    out << call->value << "(";
+                                                    for (size_t i = 0; i < call->children.size(); ++i) {
+                                                        if (i) out << ", ";
+                                                        out << emitExprExpanded(call->children[i]);
+                                                    }
+                                                    out << ");\n";
+                                                    return;
+                                                }
+                                                if (call->type == "Invoke") {
+                                                    // children[0] target, rest args
+                                                    out << emitExprExpanded(call->children[0]) << "(";
+                                                    for (size_t i = 1; i < call->children.size(); ++i) {
+                                                        if (i > 1) out << ", ";
+                                                        out << emitExprExpanded(call->children[i]);
+                                                    }
+                                                    out << ");\n";
+                                                    return;
+                                                }
+                                                logUnsupported(call, "emitFunctionCall");
+                                            }
+
+                                            // --------------- Indentation-aware emitter dispatcher ----------------------
+                                            // Add a new emitter that tracks indentation depth. We keep the original emitExpr.
+
+                                            static void emitNodeIndented(Node* n, std::ostringstream& out, int depth);
+
+                                            static void emitChildrenIndented(const std::vector<Node*>& cs, std::ostringstream& out, int depth) {
+                                                for (auto* c : cs) emitNodeIndented(c, out, depth);
+                                            }
+
+                                            static void emitPreludeMassive(std::ostringstream& out) {
+                                                out << "#include <algorithm>\n";
+                                                out << "#include <array>\n";
+                                                out << "#include <atomic>\n";
+                                                out << "#include <chrono>\n";
+                                                out << "#include <cmath>\n";
+                                                out << "#include <cstdint>\n";
+                                                out << "#include <cstdlib>\n";
+                                                out << "#include <deque>\n";
+                                                out << "#include <functional>\n";
+                                                out << "#include <fstream>\n";
+                                                out << "#include <iomanip>\n";
+                                                out << "#include <iostream>\n";
+                                                out << "#include <limits>\n";
+                                                out << "#include <map>\n";
+                                                out << "#include <mutex>\n";
+                                                out << "#include <numeric>\n";
+                                                out << "#include <queue>\n";
+                                                out << "#include <set>\n";
+                                                out << "#include <sstream>\n";
+                                                out << "#include <stdexcept>\n";
+                                                out << "#include <string>\n";
+                                                out << "#include <thread>\n";
+                                                out << "#include <tuple>\n";
+                                                out << "#include <unordered_map>\n";
+                                                out << "#include <unordered_set>\n";
+                                                out << "#include <utility>\n";
+                                                out << "#include <vector>\n";
+                                                out << "#if defined(_OPENMP)\n#include <omp.h>\n#endif\n";
+                                                // Basic channel template
+                                                out << "template<typename T>\nstruct Channel { std::mutex m; std::condition_variable cv; std::deque<T> q; "
+                                                    "void send(const T& v){ std::lock_guard<std::mutex> lk(m); q.push_back(v); cv.notify_one(); } "
+                                                    "void recv(T& out){ std::unique_lock<std::mutex> lk(m); cv.wait(lk,[&]{return !q.empty();}); out=std::move(q.front()); q.pop_front(); } };\n\n";
+                                            }
+
+                                            static void emitNodeIndented(Node* n, std::ostringstream& out, int depth) {
+                                                if (!n) return;
+                                                if (n->type == "Program") {
+                                                    emitPreludeMassive(out);
+                                                    // forward declare functions for simplicity (void f(...);)
+                                                    for (auto* c : n->children) if (c->type == "Fn") {
+                                                        // simple forward decl (no types => ...), safe fallback is 'void name();'
+                                                        out << "void " << c->value << "();\n";
+                                                    }
+                                                    // Definitions
+                                                    for (auto* c : n->children) if (c->type == "Fn") {
+                                                        emitFunctionDef(c, out, 0);
+                                                        // body after signature
+                                                        Node* body = nullptr;
+                                                        for (auto* ch : c->children) if (ch->type == "Body") { body = ch; break; }
+                                                        out << "{\n";
+                                                        if (body) emitChildrenIndented(body->children, out, 2);
+                                                        out << "}\n";
+                                                    }
+                                                    // main body
+                                                    out << "int main(){\n";
+                                                    for (auto* c : n->children) if (c->type != "Fn") emitNodeIndented(c, out, 2);
+                                                    out << "  return 0;\n}\n";
+                                                    return;
+                                                }
+
+                                                // Control flow and statements
+                                                if (n->type == "Print") {
+                                                    if (!n->children.empty()) {
+                                                        emitIndent(out, depth); out << "std::cout << " << emitExprExpanded(n->children[0]) << " << std::endl;\n";
+                                                    }
+                                                    else {
+                                                        emitIndent(out, depth); out << "std::cout << \"" << escapeCppString(n->value) << "\" << std::endl;\n";
+                                                    }
+                                                    return;
+                                                }
+                                                if (n->type == "Input") {
+                                                    emitIndent(out, depth); out << "std::cin >> " << n->value << ";\n";
+                                                    return;
+                                                }
+                                                if (n->type == "Let") {
+                                                    emitIndent(out, depth);
+                                                    out << "auto " << n->value << " = " << (n->children.empty() ? "0" : emitExprExpanded(n->children[0])) << ";\n";
+                                                    // declare in symbol table
+                                                    gScopes.declare(n->value, SymInfo{ "auto", "local" });
+                                                    return;
+                                                }
+                                                if (n->type == "Assign") {
+                                                    emitIndent(out, depth);
+                                                    const std::string lhs = (n->children.empty() ? "/*lhs*/" : emitExprExpanded(n->children[0]));
+                                                    if (n->value == "++" || n->value == "--") {
+                                                        out << lhs << (n->value == "++" ? " += 1" : " -= 1") << ";\n";
+                                                    }
+                                                    else {
+                                                        out << lhs << " " << n->value << " " << (n->children.size() > 1 ? emitExprExpanded(n->children[1]) : "0") << ";\n";
+                                                    }
+                                                    return;
+                                                }
+                                                if (n->type == "Call" || n->type == "CallExpr" || n->type == "Invoke") {
+                                                    emitFunctionCall(n, out, depth);
+                                                    return;
+                                                }
+                                                if (n->type == "If") {
+                                                    std::string cond = "0";
+                                                    Node* thenB = nullptr; Node* elseB = nullptr;
+                                                    if (!n->children.empty() && n->children[0]->type == "Cond" && !n->children[0]->children.empty()) {
+                                                        cond = emitExprExpanded(n->children[0]->children[0]);
+                                                    }
+                                                    if (n->children.size() > 1) thenB = n->children[1];
+                                                    if (n->children.size() > 2 && n->children[2]->type == "Else") elseB = n->children[2];
+                                                    emitIndent(out, depth); out << "if (" << cond << ") {\n";
+                                                    if (thenB) emitChildrenIndented(thenB->children, out, depth + 2);
+                                                    emitIndent(out, depth); out << "}\n";
+                                                    if (elseB) {
+                                                        emitIndent(out, depth); out << "else {\n";
+                                                        emitChildrenIndented(elseB->children, out, depth + 2);
+                                                        emitIndent(out, depth); out << "}\n";
+                                                    }
+                                                    return;
+                                                }
+                                                if (n->type == "While") {
+                                                    std::string cond = (!n->children.empty() && !n->children[0]->children.empty()) ? emitExprExpanded(n->children[0]->children[0]) : "true";
+                                                    emitIndent(out, depth); out << "while (" << cond << ") {\n";
+                                                    if (n->children.size() > 1) emitChildrenIndented(n->children[1]->children, out, depth + 2);
+                                                    emitIndent(out, depth); out << "}\n";
+                                                    return;
+                                                }
+                                                if (n->type == "Loop") {
+                                                    // Consider value as "init; cond; step" or full header. Emit verbatim into for()
+                                                    std::string hdr = n->value.empty() ? ";" : n->value;
+                                                    emitIndent(out, depth);
+                                                    if (hdr.find("for") == std::string::npos) out << "for(" << hdr << ") {\n";
+                                                    else out << hdr << " {\n";
+                                                    if (!n->children.empty()) emitChildrenIndented(n->children[0]->children, out, depth + 2);
+                                                    emitIndent(out, depth); out << "}\n";
+                                                    return;
+                                                }
+                                                if (n->type == "Break") { emitIndent(out, depth); out << "break;\n"; return; }
+                                                if (n->type == "Continue") { emitIndent(out, depth); out << "continue;\n"; return; }
+                                                if (n->type == "Ret") {
+                                                    emitIndent(out, depth);
+                                                    if (!n->children.empty()) out << "return " << emitExprExpanded(n->children[0]) << ";\n";
+                                                    else out << "return;\n";
+                                                    return;
+                                                }
+                                                if (n->type == "Open") {
+                                                    std::string var = n->value;
+                                                    std::string path = (!n->children.empty() ? n->children[0]->value : "");
+                                                    std::string mode = (n->children.size() > 1 ? n->children[1]->value : "out");
+                                                    emitIndent(out, depth);
+                                                    out << "std::fstream " << var << "(\"" << escapeCppString(path) << "\", ";
+                                                    // out/app/in/bin support via OR-combination if user provided "out|app"
+                                                    // For simplicity in this pipeline, accept "out", "in", "app", "binary"
+                                                    if (mode == "in") out << "std::ios::in";
+                                                    else if (mode == "app") out << "std::ios::app";
+                                                    else if (mode == "binary") out << "std::ios::binary";
+                                                    else out << "std::ios::out";
+                                                    out << ");\n";
+                                                    return;
+                                                }
+                                                if (n->type == "Write") {
+                                                    emitIndent(out, depth);
+                                                    out << n->value << " << " << (n->children.empty() ? "\"\"" : emitExprExpanded(n->children[0])) << ";\n";
+                                                    return;
+                                                }
+                                                if (n->type == "Writeln") {
+                                                    emitIndent(out, depth);
+                                                    out << n->value << " << " << (n->children.empty() ? "\"\"" : emitExprExpanded(n->children[0])) << " << std::endl;\n";
+                                                    return;
+                                                }
+                                                if (n->type == "Read") {
+                                                    emitIndent(out, depth);
+                                                    out << n->value << " >> " << (n->children.empty() ? "/*?*/x" : n->children[0]->value) << ";\n";
+                                                    return;
+                                                }
+                                                if (n->type == "Close") { emitIndent(out, depth); out << n->value << ".close();\n"; return; }
+
+                                                // Fall back to legacy emitter branch if needed
+                                                logUnsupported(n, "indent-dispatch");
+                                            }
+
+                                            // --------------- MacroExpander pre-pass (source-level) ---------------------
+                                            // Runs after ciam::Preprocessor.Process and before tokenize.
+                                            // Safe expansions only; integrates with CIAM if available, otherwise no-op.
+
+                                            static void MacroExpandSource(std::string& src) {
+                                                // Simple, safe, opt-in transforms:
+                                                // 1) Normalize return keyword 'ret' -> 'ret' (no change, kept for future)
+                                                // 2) Allow 'println "x"' sugar -> 'Print "x"'
+                                                {
+                                                    std::string out; out.reserve(src.size());
+                                                    std::istringstream is(src);
+                                                    std::string line;
+                                                    while (std::getline(is, line)) {
+                                                        std::string trimmed = line;
+                                                        auto notspace = [](unsigned char ch) { return !std::isspace(ch); };
+                                                        trimmed.erase(trimmed.begin(), std::find_if(trimmed.begin(), trimmed.end(), notspace));
+                                                        if (trimmed.rfind("println ", 0) == 0) {
+                                                            // replace with Print
+                                                            size_t pos = line.find("println");
+                                                            if (pos != std::string::npos) line.replace(pos, 7, "Print  ");
+                                                        }
+                                                        out.append(line);
+                                                        out.push_back('\n');
+                                                    }
+                                                    src.swap(out);
+                                                }
+                                                // 3) CIAM hooks can further expand here; we keep the seam for future:
+                                                //    ciam::MacroRegistry::expandSource(src); // if available
+                                            }
+
+                                            // --------------- Upgrade prelude and emit path in first pipeline -----------
+                                            // Replace the first emitPrelude(...) with the massive one and redirect emitCPP to indentation-aware path.
+
+                                            // Find: static void emitPrelude(std::ostringstream& out) { ... } (first pipeline) and replace with:
+                                            static void emitPrelude(std::ostringstream& out) {
+                                                emitPreludeMassive(out);
+                                            }
+
+                                            // Find: static void emitNode(Node* n, std::ostringstream& out) { ... } (first pipeline) and replace its Program handler to delegate:
+                                            static void emitNode(Node* n, std::ostringstream& out) {
+                                                // Delegate to indentation-aware emitter for the first pipeline
+                                                emitNodeIndented(n, out, 0);
+                                            }
+
+                                            // Find: std::string emitCPP(Node* root) { ... } (first pipeline) and keep as-is (it calls emitNode)
+
+// --------------- Integrate MacroExpander in Driver main() ------------------
+// In the first main(), after ciamPre.Process(src); add:
+                                            MacroExpandSource(src);
+
+                                            // Add near other globals in the Introspection & Plugin System section (right above collectOverlaysFlags)
+                                            static bool gOverlayAstroManaged = false;
+                                            static int  gAstroE = 2, gAstroP = 2, gAstroZ = 3, gAstroW = 8;
+
+                                            static int toIntSafe(const std::string& s, int defv) {
+                                                char* endp = nullptr;
+                                                long v = std::strtol(s.c_str(), &endp, 10);
+                                                if (!endp || *endp != '\0') return defv;
+                                                if (v < 0) v = 0;
+                                                if (v > 1'000'000) v = 1'000'000;
+                                                return static_cast<int>(v);
+                                            }
+
+                                            // Replace the existing collectOverlaysFlags(...) body with this enhanced version
+                                            static void collectOverlaysFlags(Node* n) {
+                                                if (!n) return;
+                                                if (n->type == "Overlay") {
+                                                    std::string low = n->value;
+                                                    std::transform(low.begin(), low.end(), low.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+
+                                                    if (low == "mutate")  gEnableMutate = true;
+                                                    if (low == "inspect") gEnableInspect = true;
+                                                    if (low == "replay")  gEnableReplay = true;
+                                                    if (low == "audit")   gEnableInspect = true;
+
+                                                    // Managed containment overlays
+                                                    if (low == "astro" || low == "astrolake" || low == "managed" || low == "astro_scheduler") {
+                                                        gOverlayAstroManaged = true;
+                                                        // Optional numeric args: eCount, pCount, zLayers, workers
+                                                        int args[4] = { gAstroE, gAstroP, gAstroZ, gAstroW };
+                                                        size_t k = 0;
+                                                        for (auto* a : n->children) {
+                                                            if (!a || a->type != "Num") continue;
+                                                            if (k < 4) args[k++] = toIntSafe(a->value, args[k]);
+                                                        }
+                                                        gAstroE = args[0]; gAstroP = args[1]; gAstroZ = args[2]; gAstroW = args[3];
+                                                    }
+
+                                                    // Emit overlay macro for CIAM
+                                                    ciam::emitMacroFromOverlay(n->value);
+                                                }
+                                                if (n->type == "Mutate") gEnableMutate = true;
+                                                for (auto* c : n->children) collectOverlaysFlags(c);
+                                            }
+
+                                            // Add this helper right below emitPrelude(...) or alongside other emit helpers
+                                            static void emitManagedContainmentPrelude(std::ostringstream& out) {
+                                                // Headers (idempotent if included multiple times)
+                                                out << "#include <thread>\n#include <atomic>\n#include <random>\n#include <queue>\n#include <map>\n";
+
+                                                // Runtime: minimal integration based on Astro Lake concepts, safe C++14
+                                                out << "namespace mc {\n";
+                                                out << "enum CoreType{E_CORE,P_CORE};\n";
+                                                out << "struct ThreadDescriptor{int id=0; CoreType coreType=E_CORE; int zOffset=0; double temperature=30.0; double energy=0.0; double performance=1.0;};\n";
+
+                                                out << "class AstroLakeCore{ CoreType type; int coreID; int zOffset; double temperature=40.0, energy=0.0;\n";
+                                                out << "public:\n";
+                                                out << "  AstroLakeCore(CoreType t,int id,int z):type(t),coreID(id),zOffset(z){}\n";
+                                                out << "  void execute(ThreadDescriptor& td){ double work=(type==P_CORE?1.5:0.5); int ms=(type==P_CORE?40:120); td.performance = work*(100.0-td.temperature)/100.0; std::this_thread::sleep_for(std::chrono::milliseconds(ms)); td.energy+=work*0.1; td.temperature+=work*0.8; temperature = std::max(25.0, temperature-0.2);} \n";
+                                                out << "  CoreType getType()const{return type;} double getTemperature()const{return temperature;}\n";
+                                                out << "};\n";
+
+                                                out << "class Reservoir{ std::map<int,double> data; std::mutex mu; public:\n";
+                                                out << "  void deposit(int tid,double perf){ std::lock_guard<std::mutex>l(mu); data[tid]=perf; }\n";
+                                                out << "  double query(int tid){ std::lock_guard<std::mutex>l(mu); auto it=data.find(tid); return it==data.end()?0.0:it->second; }\n";
+                                                out << "};\n";
+
+                                                out << "class Scheduler{\n";
+                                                out << "  int zLayers; std::vector<AstroLakeCore> eCores, pCores; Reservoir lake;\n";
+                                                out << "  std::deque<std::function<void()>> q; std::mutex mu; std::condition_variable cv; std::atomic<bool> stop{false}; std::vector<std::thread> workers;\n";
+                                                out << "  static CoreType pickType(double perf){ return (perf<0.8?P_CORE:E_CORE); }\n";
+                                                out << "public:\n";
+                                                out << "  Scheduler(int eCount,int pCount,int zLayers,int workersN):zLayers(zLayers){ int id=0; for(int z=0; z<zLayers; ++z) for(int i=0;i<eCount;++i) eCores.emplace_back(E_CORE,id++,z); for(int z=0; z<zLayers; ++z) for(int i=0;i<pCount;++i) pCores.emplace_back(P_CORE,id++,z); \n";
+                                                out << "    for(int i=0;i<workersN;++i) workers.emplace_back([this](){ this->loop(); }); }\n";
+                                                out << "  ~Scheduler(){ stop.store(true); cv.notify_all(); for(auto& w:workers) if(w.joinable()) w.join(); }\n";
+                                                out << "  void submit(std::function<void()> fn){ { std::lock_guard<std::mutex>l(mu); q.emplace_back(std::move(fn)); } cv.notify_one(); }\n";
+                                                out << "private:\n";
+                                                out << "  AstroLakeCore* choose(CoreType t){ auto& pool = (t==P_CORE? pCores : eCores); if(pool.empty()) return nullptr; size_t idx = (size_t) (std::rand()%pool.size()); return &pool[idx]; }\n";
+                                                out << "  void loop(){ std::mt19937 rng(std::random_device{}()); int tid=0; while(!stop.load()){ std::function<void()> fn; { std::unique_lock<std::mutex>l(mu); cv.wait(l,[&]{return stop.load()||!q.empty();}); if(stop.load()) break; fn = std::move(q.front()); q.pop_front(); }\n";
+                                                out << "      ThreadDescriptor td; td.id = tid++; td.temperature = 30.0; td.performance=1.0; CoreType target = pickType(td.performance); AstroLakeCore* core = choose(target); if(core){ core->execute(td); lake.deposit(td.id, td.performance); }\n";
+                                                out << "      if(fn) fn(); }\n";
+                                                out << "  }\n";
+                                                out << "};\n";
+
+                                                out << "static std::unique_ptr<Scheduler> g;\n";
+                                                out << "static std::atomic<bool> started{false};\n";
+                                                out << "inline void start(int e,int p,int z,int w){ if(!g){ g.reset(new Scheduler(e,p,z,w)); started.store(true);} }\n";
+                                                out << "inline void ensure_started(){ if(!started.load()) start(" << gAstroE << "," << gAstroP << "," << gAstroZ << "," << gAstroW << "); }\n";
+                                                out << "inline void submit(std::function<void()> fn){ ensure_started(); g->submit(std::move(fn)); }\n";
+                                                out << "inline void stop(){ if(g){ g.reset(); started.store(false);} }\n";
+                                                out << "} // namespace mc\n";
+                                            }
+
+                                            // Amend the existing emitPrelude(...) to include the managed containment prelude when overlay is active
+                                            static void emitPrelude(std::ostringstream& out) {
+                                                // ... keep existing prelude content ...
+                                                out << "#if defined(_OPENMP)\n#include <omp.h>\n#endif\n";
+                                                // channel template remains...
+
+                                                if (gOverlayAstroManaged) {
+                                                    emitManagedContainmentPrelude(out);
+                                                }
+                                            }
+
+                                            // Replace the existing emitScheduler(...) with this version (keeps non-overlay path unchanged)
+                                            static void emitScheduler(std::ostringstream& out, Node* scheduleNode) {
+                                                std::string pr = scheduleNode->value.empty() ? "0" : scheduleNode->value;
+
+                                                if (gOverlayAstroManaged) {
+                                                    // Managed containment path: packetize the body as a background task
+                                                    out << "{ /* managed schedule pr=" << pr << " */\n";
+                                                    out << "  mc::ensure_started();\n";
+                                                    out << "  mc::submit([=](){\n";
+                                                    if (!scheduleNode->children.empty()) emitChildren(scheduleNode->children[0]->children, out);
+                                                    out << "  });\n";
+                                                    out << "}\n";
+                                                    return;
+                                                }
+
+                                                // Fallback: single-threaded execution (original)
+                                                out << "{ struct __Task{int pr; std::function<void()> fn;}; std::vector<__Task> __sched;\n";
+                                                out << "__sched.push_back(__Task{" << pr << ", [=](){\n";
+                                                if (!scheduleNode->children.empty()) emitChildren(scheduleNode->children[0]->children, out);
+                                                out << "}});\n";
+                                                out << "std::sort(__sched.begin(), __sched.end(), [](const __Task&a,const __Task&b){return a.pr>b.pr;});\n";
+                                                out << "for (auto& t: __sched) t.fn(); }\n";
+                                            }
+
+                                            // In emitNode(...) Program branch, start/stop the runtime around main body.
+                                            // Find:
+                                            //   out << "int main(){\n";
+                                            //   for (auto* c : n->children) ...
+                                            //   out << "return 0;\n}\n";
+                                            // Change to:
+                                            out << "int main(){\n";
+                                            if (gOverlayAstroManaged) {
+                                                out << "mc::ensure_started();\n";
+                                            }
+                                            for (auto* c : n->children)
+                                                if (c->type != "Fn") emitNode(c, out);
+                                            if (gOverlayAstroManaged) {
+                                                out << "mc::stop();\n";
+                                            }
+                                            out << "return 0;\n}\n";
+
+
+                                            // Add near Introspection & Plugin System (place above collectOverlaysFlags)
+                                            static bool gOverlayAstroManaged = false;
+                                            static int  gAstroE = 2, gAstroP = 2, gAstroZ = 3, gAstroW = 8;
+
+                                            static int toIntSafe(const std::string& s, int defv) {
+                                                char* endp = nullptr;
+                                                long v = std::strtol(s.c_str(), &endp, 10);
+                                                if (!endp || *endp != '\0') return defv;
+                                                if (v < 0) v = 0;
+                                                if (v > 1000000) v = 1000000;
+                                                return static_cast<int>(v);
+                                            }
+
+                                            // Replace the first collectOverlaysFlags(...) implementation with this:
+                                            static void collectOverlaysFlags(Node* n) {
+                                                if (!n) return;
+                                                if (n->type == "Overlay") {
+                                                    std::string low = n->value;
+                                                    std::transform(low.begin(), low.end(), low.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+
+                                                    if (low == "mutate")  gEnableMutate = true;
+                                                    if (low == "inspect") gEnableInspect = true;
+                                                    if (low == "replay")  gEnableReplay = true;
+                                                    if (low == "audit")   gEnableInspect = true;
+
+                                                    // Managed containment overlays
+                                                    if (low == "astro" || low == "astrolake" || low == "managed" || low == "astro_scheduler") {
+                                                        gOverlayAstroManaged = true;
+                                                        // Optional numeric args carried as children: E, P, Z, Workers
+                                                        int args[4] = { gAstroE, gAstroP, gAstroZ, gAstroW };
+                                                        size_t k = 0;
+                                                        for (auto* a : n->children) {
+                                                            if (!a) continue;
+                                                            if (a->type == "Num" && k < 4) { args[k++] = toIntSafe(a->value, args[k]); }
+                                                        }
+                                                        gAstroE = args[0]; gAstroP = args[1]; gAstroZ = args[2]; gAstroW = args[3];
+                                                    }
+
+                                                    // CIAM macro broadcast (if available)
+                                                    // Safe no-op when MacroRegistry bridge is absent.
+                                                    try { ciam::emitMacroFromOverlay(n->value); }
+                                                    catch (...) {}
+                                                }
+                                                if (n->type == "Mutate") gEnableMutate = true;
+                                                for (auto* c : n->children) collectOverlaysFlags(c);
+                                            }
+
+                                            // Add below emitChildren(...) or just above emitPrelude(...)
+
+                                            static void emitManagedContainmentPrelude(std::ostringstream& out) {
+                                                out << "#include <thread>\n";
+                                                out << "#include <atomic>\n";
+                                                out << "#include <random>\n";
+                                                out << "#include <queue>\n";
+                                                out << "#include <map>\n";
+                                                out << "#include <chrono>\n";
+
+                                                out << "namespace mc {\n";
+                                                out << "enum CoreType{E_CORE,P_CORE};\n";
+                                                out << "struct ThreadDescriptor{int id=0; CoreType coreType=E_CORE; int zOffset=0; double temperature=30.0; double energy=0.0; double performance=1.0;};\n";
+
+                                                out << "class AstroLakeCore{\n";
+                                                out << "  CoreType type; int coreID; int zOffset; double temperature=40.0, energy=0.0;\n";
+                                                out << "public:\n";
+                                                out << "  AstroLakeCore(CoreType t,int id,int z):type(t),coreID(id),zOffset(z){}\n";
+                                                out << "  void execute(ThreadDescriptor& td){ double work=(type==P_CORE?1.5:0.5); int ms=(type==P_CORE?40:120); td.performance = work*(100.0-td.temperature)/100.0; std::this_thread::sleep_for(std::chrono::milliseconds(ms)); td.energy+=work*0.1; td.temperature+=work*0.8; temperature = std::max(25.0, temperature-0.2);} \n";
+                                                out << "  CoreType getType()const{return type;} double getTemperature()const{return temperature;}\n";
+                                                out << "};\n";
+
+                                                out << "class Reservoir{ std::map<int,double> data; std::mutex mu; public:\n";
+                                                out << "  void deposit(int tid,double perf){ std::lock_guard<std::mutex>l(mu); data[tid]=perf; }\n";
+                                                out << "  double query(int tid){ std::lock_guard<std::mutex>l(mu); auto it=data.find(tid); return it==data.end()?0.0:it->second; }\n";
+                                                out << "};\n";
+
+                                                out << "class Scheduler{\n";
+                                                out << "  int zLayers; std::vector<AstroLakeCore> eCores, pCores; Reservoir lake;\n";
+                                                out << "  std::deque<std::function<void()>> q; std::mutex mu; std::condition_variable cv; std::atomic<bool> stop{false}; std::vector<std::thread> workers;\n";
+                                                out << "  static CoreType pickType(double perf){ return (perf<0.8?P_CORE:E_CORE); }\n";
+                                                out << "public:\n";
+                                                out << "  Scheduler(int eCount,int pCount,int zL,int workersN):zLayers(zL){ int id=0; for(int z=0; z<zLayers; ++z) for(int i=0;i<eCount;++i) eCores.emplace_back(E_CORE,id++,z); for(int z=0; z<zLayers; ++z) for(int i=0;i<pCount;++i) pCores.emplace_back(P_CORE,id++,z); for(int i=0;i<workersN;++i) workers.emplace_back([this](){ this->loop(); }); }\n";
+                                                out << "  ~Scheduler(){ stop.store(true); cv.notify_all(); for(auto& w:workers) if(w.joinable()) w.join(); }\n";
+                                                out << "  void submit(std::function<void()> fn){ { std::lock_guard<std::mutex>l(mu); q.emplace_back(std::move(fn)); } cv.notify_one(); }\n";
+                                                out << "private:\n";
+                                                out << "  AstroLakeCore* choose(CoreType t){ auto& pool = (t==P_CORE? pCores : eCores); if(pool.empty()) return nullptr; size_t idx = (size_t)(std::rand()%pool.size()); return &pool[idx]; }\n";
+                                                out << "  void loop(){ std::mt19937 rng(std::random_device{}()); int tid=0; while(!stop.load()){ std::function<void()> fn; { std::unique_lock<std::mutex>l(mu); cv.wait(l,[&]{return stop.load()||!q.empty();}); if(stop.load()) break; fn = std::move(q.front()); q.pop_front(); }\n";
+                                                out << "      ThreadDescriptor td; td.id = tid++; td.temperature = 30.0; td.performance=1.0; CoreType target = pickType(td.performance); AstroLakeCore* core = choose(target); if(core){ core->execute(td); lake.deposit(td.id, td.performance); }\n";
+                                                out << "      if(fn) fn(); }\n";
+                                                out << "  }\n";
+                                                out << "};\n";
+
+                                                out << "static std::unique_ptr<Scheduler> g;\n";
+                                                out << "static std::atomic<bool> started{false};\n";
+                                                out << "inline void start(int e,int p,int z,int w){ if(!g){ g.reset(new Scheduler(e,p,z,w)); started.store(true);} }\n";
+                                                out << "inline void ensure_started(){ if(!started.load()) start(" << gAstroE << "," << gAstroP << "," << gAstroZ << "," << gAstroW << "); }\n";
+                                                out << "inline void submit(std::function<void()> fn){ ensure_started(); g->submit(std::move(fn)); }\n";
+                                                out << "inline void stop(){ if(g){ g.reset(); started.store(false);} }\n";
+                                                out << "} // namespace mc\n";
+                                            }
+
+                                            // Replace the first emitPrelude(...) used by Program emission with this version
+                                            static void emitPrelude(std::ostringstream& out) {
+                                                out << "#include <iostream>\n";
+                                                out << "#include <fstream>\n";
+                                                out << "#include <cmath>\n";
+                                                out << "#include <vector>\n";
+                                                out << "#include <deque>\n";
+                                                out << "#include <mutex>\n";
+                                                out << "#include <condition_variable>\n";
+                                                out << "#include <functional>\n";
+                                                out << "#include <algorithm>\n";
+                                                out << "#if defined(_OPENMP)\n#include <omp.h>\n#endif\n";
+                                                // Channel
+                                                out << "template<typename T>\nstruct Channel { std::mutex m; std::condition_variable cv; std::deque<T> q;\n";
+                                                out << "  void send(const T& v){ std::lock_guard<std::mutex> lk(m); q.push_back(v); cv.notify_one(); }\n";
+                                                out << "  void recv(T& out){ std::unique_lock<std::mutex> lk(m); cv.wait(lk,[&]{return !q.empty();}); out = std::move(q.front()); q.pop_front(); }\n";
+                                                out << "};\n\n";
+                                                if (gOverlayAstroManaged) {
+                                                    emitManagedContainmentPrelude(out);
+                                                }
+                                            }
+
+                                            // Replace the first emitScheduler(...) implementation with this:
+                                            static void emitScheduler(std::ostringstream& out, Node* scheduleNode) {
+                                                std::string pr = scheduleNode->value.empty() ? "0" : scheduleNode->value;
+
+                                                if (gOverlayAstroManaged) {
+                                                    out << "{ /* managed schedule pr=" << pr << " */\n";
+                                                    out << "  mc::ensure_started();\n";
+                                                    out << "  mc::submit([=](){\n";
+                                                    if (!scheduleNode->children.empty()) emitChildren(scheduleNode->children[0]->children, out);
+                                                    out << "  });\n";
+                                                    out << "}\n";
+                                                    return;
+                                                }
+
+                                                // Fallback single-threaded path
+                                                out << "{ struct __Task{int pr; std::function<void()> fn;}; std::vector<__Task> __sched;\n";
+                                                out << "__sched.push_back(__Task{" << pr << ", [=](){\n";
+                                                if (!scheduleNode->children.empty()) emitChildren(scheduleNode->children[0]->children, out);
+                                                out << "}});\n";
+                                                out << "std::sort(__sched.begin(), __sched.end(), [](const __Task&a,const __Task&b){return a.pr>b.pr;});\n";
+                                                out << "for (auto& t: __sched) t.fn(); }\n";
+                                            }
+
+                                            // In the first emitNode(...) Program branch, replace the main emission with:
+                                            out << "int main(){\n";
+                                            if (gOverlayAstroManaged) {
+                                                out << "mc::ensure_started();\n";
+                                            }
+                                            for (auto* c : n->children)
+                                                if (c->type != "Fn") emitNode(c, out);
+                                            if (gOverlayAstroManaged) {
+                                                out << "mc::stop();\n";
+                                            }
+                                            out << "return 0;\n}\n";
+
+                                            // ------------------------ Introspection & Plugin System ------------------------
+
+                                            // existing flags...
+                                            static bool gEnableInspect = false;
+                                            static bool gEnableReplay = false;
+                                            static bool gEnableMutate = false;
+
+                                            // [ADD] Overlay-driven runtime feature flags (first pipeline)
+                                            static bool gOverlayNcurses = false;
+                                            static bool gOverlayThreads = false;
+                                            static bool gOverlayAutoscale = false;
+                                            static bool gOverlayCompress = false;
+                                            static bool gOverlayIndex = false;
+                                            static bool gOverlayChannelSpsc = false;
+                                            static bool gOverlayChannelMpmc = false;
+                                            static int  gPacketSize = 1;
+
+                                            // ... existing structs/sinks ...
+
+                                            // [REPLACE] collectOverlaysFlags in the first pipeline with overlay feature collection
+                                            static void collectOverlaysFlags(Node* n) {
+                                                if (!n) return;
+                                                if (n->type == "Overlay") {
+                                                    std::string low = n->value;
+                                                    std::transform(low.begin(), low.end(), low.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+
+                                                    // base CIAM toggles
+                                                    if (low == "mutate") gEnableMutate = true;
+                                                    if (low == "inspect") gEnableInspect = true;
+                                                    if (low == "replay" || low == "audit") gEnableReplay = true;
+
+                                                    // terminal / ncurses
+                                                    if (low == "term" || low == "ncurses") gOverlayNcurses = true;
+
+                                                    // parallelism
+                                                    if (low == "threads" || low == "parallel" || low == "mt") gOverlayThreads = true;
+                                                    if (low == "autoscale") gOverlayAutoscale = true;
+
+                                                    // packetization: packetNN (e.g., packet64)
+                                                    if (low.rfind("packet", 0) == 0 && low.size() > 6) {
+                                                        int v = 0;
+                                                        try { v = std::stoi(low.substr(6)); }
+                                                        catch (...) { v = 0; }
+                                                        if (v > 0) { gPacketSize = v; gOverlayThreads = true; }
+                                                    }
+
+                                                    // channels
+                                                    if (low == "channel_spsc") { gOverlayChannelSpsc = true; gOverlayChannelMpmc = false; }
+                                                    if (low == "channel_mpmc") { gOverlayChannelMpmc = true; gOverlayChannelSpsc = false; }
+
+                                                    // utilities
+                                                    if (low == "compress") gOverlayCompress = true;
+                                                    if (low == "index" || low == "indexer" || low == "indexing") gOverlayIndex = true;
+                                                }
+                                                if (n->type == "Mutate") gEnableMutate = true;
+                                                for (auto* c : n->children) collectOverlaysFlags(c);
+                                            }
+
+                                            // ------------------------ Emitter ------------------------
+
+                                            // [REPLACE] the first-pipeline emitPrelude(...) with a feature-rich prelude
+                                            static void emitPrelude(std::ostringstream& out) {
+                                                out << "#include <iostream>\n";
+                                                out << "#include <fstream>\n";
+                                                out << "#include <cmath>\n";
+                                                out << "#include <vector>\n";
+                                                out << "#include <deque>\n";
+                                                out << "#include <mutex>\n";
+                                                out << "#include <condition_variable>\n";
+                                                out << "#include <functional>\n";
+                                                out << "#include <algorithm>\n";
+                                                out << "#include <thread>\n";
+                                                out << "#include <atomic>\n";
+                                                out << "#include <queue>\n";
+                                                out << "#include <map>\n";
+                                                out << "#include <chrono>\n";
+                                                out << "#if defined(_OPENMP)\n#include <omp.h>\n#endif\n";
+                                                out << "#if defined(HAVE_NCURSES)\n#include <ncurses.h>\n#endif\n\n";
+
+                                                // Terminal helper (guarded)
+                                                out << "namespace termui {\n";
+                                                out << "inline void init(){\n"
+                                                    "#if defined(HAVE_NCURSES)\n"
+                                                    "initscr(); noecho(); cbreak(); curs_set(0);\n"
+                                                    "#endif\n}\n";
+                                                out << "inline void shutdown(){\n"
+                                                    "#if defined(HAVE_NCURSES)\n"
+                                                    "endwin();\n"
+                                                    "#endif\n}\n}\n\n";
+
+                                                // Barrier (C++14)
+                                                out << "struct Barrier{ std::mutex m; std::condition_variable cv; int total; int count=0; int gen=0; explicit Barrier(int n):total(n){}\n";
+                                                out << "void wait(){ std::unique_lock<std::mutex> lk(m); int g=gen; if(++count==total){ ++gen; count=0; cv.notify_all(); } else cv.wait(lk,[&]{return gen!=g;}); }};\n\n";
+
+                                                // SPSC channel (bounded)
+                                                out << "template<typename T>\nclass SpscChannel{ std::vector<T> buf; std::atomic<size_t> head{0}, tail{0}; size_t cap; std::mutex m; std::condition_variable cv; \n";
+                                                out << "public: explicit SpscChannel(size_t capPow2=1024):buf(capPow2),cap(capPow2){}\n";
+                                                out << "  void send(const T& v){ size_t t; for(;;){ t=tail.load(std::memory_order_relaxed); size_t h=head.load(std::memory_order_acquire); if(((t+1)%cap)!=h) break; std::unique_lock<std::mutex> lk(m); cv.wait_for(lk,std::chrono::milliseconds(1)); }\n";
+                                                out << "    buf[t]=v; tail.store((t+1)%cap,std::memory_order_release); cv.notify_one(); }\n";
+                                                out << "  void recv(T& out){ for(;;){ size_t h=head.load(std::memory_order_relaxed); size_t t=tail.load(std::memory_order_acquire); if(h!=t){ out=std::move(buf[h]); head.store((h+1)%cap,std::memory_order_release); return; } std::unique_lock<std::mutex> lk(m); cv.wait_for(lk,std::chrono::milliseconds(1)); }}\n";
+                                                out << "};\n";
+
+                                                // MPMC channel
+                                                out << "template<typename T>\nclass MpmcChannel{ std::mutex m; std::condition_variable cv; std::deque<T> q; \n";
+                                                out << "public: void send(const T& v){ std::lock_guard<std::mutex> lk(m); q.push_back(v); cv.notify_one(); }\n";
+                                                out << "  void recv(T& out){ std::unique_lock<std::mutex> lk(m); cv.wait(lk,[&]{return !q.empty();}); out=std::move(q.front()); q.pop_front(); }\n";
+                                                out << "};\n";
+
+                                                // Select default Channel alias (overlays -> macro defines in generated code)
+                                                out << "#if defined(CASE_CHANNEL_SPSC)\n";
+                                                out << "template<typename T> using Channel = SpscChannel<T>;\n";
+                                                out << "#elif defined(CASE_CHANNEL_MPMC)\n";
+                                                out << "template<typename T> using Channel = MpmcChannel<T>;\n";
+                                                out << "#else\n";
+                                                out << "template<typename T> using Channel = MpmcChannel<T>;\n";
+                                                out << "#endif\n\n";
+
+                                                // ThreadPool with auto-scaling
+                                                out << "class ThreadPool{ std::mutex m; std::condition_variable cv; std::deque<std::function<void()>> q; std::vector<std::thread> ws; std::atomic<bool> stop{false}; std::atomic<size_t> packet{1}; bool autoscale=false; unsigned maxThr=0;\n";
+                                                out << "  void worker(){ for(;;){ std::function<void()> fn; { std::unique_lock<std::mutex> lk(m); cv.wait(lk,[&]{return stop||!q.empty();}); if(stop && q.empty()) return; fn=std::move(q.front()); q.pop_front(); }\n";
+                                                out << "    if(fn) fn(); if(autoscale){ std::lock_guard<std::mutex> lk(m); if(q.size()>ws.size()*4 && (maxThr==0 || ws.size()<maxThr)){ ws.emplace_back([this]{worker();}); } } } }\n";
+                                                out << "public:\n";
+                                                out << "  static ThreadPool& instance(){ static ThreadPool tp; return tp; }\n";
+                                                out << "  void configure(size_t pkt,bool as,unsigned cap){ packet.store(pkt?pkt:1); autoscale=as; maxThr=cap; if(ws.empty()){ unsigned n=std::thread::hardware_concurrency(); if(n==0) n=4; unsigned start = as? std::min<unsigned>(n, (unsigned)8) : n; for(unsigned i=0;i<start;i++) ws.emplace_back([this]{worker();}); } }\n";
+                                                out << "  template<class F> void enqueue(F&& f){ { std::lock_guard<std::mutex> lk(m); q.emplace_back(std::forward<F>(f)); } cv.notify_one(); }\n";
+                                                out << "  size_t packetSize() const { return packet.load(); }\n";
+                                                out << "  ~ThreadPool(){ stop=true; cv.notify_all(); for(auto& t:ws) if(t.joinable()) t.join(); }\n";
+                                                out << "};\n\n";
+
+                                                // parallel_for helpers
+                                                out << "template<typename F>\n";
+                                                out << "void parallel_for(size_t begin,size_t end,F fn){ size_t n=end>begin? end-begin:0; if(n==0){return;} size_t pkt=ThreadPool::instance().packetSize(); if(pkt==0) pkt=1; std::atomic<size_t> next{begin}; unsigned w=std::thread::hardware_concurrency(); if(w==0) w=4; Barrier bar((int)w);\n";
+                                                out << " for(unsigned t=0;t<w;++t){ ThreadPool::instance().enqueue([&next,begin,end,pkt,fn,&bar]{ for(;;){ size_t i=next.fetch_add(pkt); if(i>=end) break; size_t e=std::min(i+pkt,end); for(size_t k=i;k<e;++k) fn(k); } bar.wait(); }); }\n";
+                                                out << "}\n\n";
+
+                                                out << "template<typename F>\n";
+                                                out << "void parallel_for_2d(size_t r0,size_t r1,size_t c0,size_t c1,F fn){ auto body=[&](size_t idx){ size_t R=r1-r0, C=c1-c0; size_t i=idx/C; size_t j=idx% C; fn(r0+i,c0+j); }; size_t N=(r1-r0)*(c1-c0); parallel_for(0,N,body); }\n\n";
+
+                                                // Boilerplate-reduction handle
+                                                out << "template<typename T>\nstruct Handle{ T value; std::function<void(T&)> dtor; Handle()=default; Handle(T v,std::function<void(T&)> d):value(std::move(v)),dtor(std::move(d)){} ~Handle(){ if(dtor) dtor(value);} T* operator->(){return &value;} T& get(){return value;} };\n\n";
+
+                                                // Utilities: RLE compression and Indexer
+                                                out << "namespace util{ inline std::string rle_compress(const std::string& s){ std::string o; o.reserve(s.size()); for(size_t i=0;i<s.size();){ char c=s[i]; size_t j=i+1; while(j<s.size() && s[j]==c && j-i<255) ++j; o.push_back(c); o.push_back(char(j-i)); i=j; } return o; }\n";
+                                                out << "inline std::string rle_decompress(const std::string& s){ std::string o; for(size_t i=0;i+1<s.size();){ char c=s[i++]; unsigned char n=(unsigned char)s[i++]; o.append(n,c); } return o; }\n";
+                                                out << "struct Indexer{ std::map<std::string,int> m; std::vector<std::string> v; int intern(const std::string& s){ auto it=m.find(s); if(it!=m.end()) return it->second; int id=(int)v.size(); v.push_back(s); m.emplace(s,id); return id; } const std::string& str(int id) const { return v[id]; } };\n}\n\n";
+
+                                                // Define Channel selection macros based on overlays (compile-time)
+                                                if (gOverlayChannelSpsc) out << "#define CASE_CHANNEL_SPSC 1\n";
+                                                else if (gOverlayChannelMpmc) out << "#define CASE_CHANNEL_MPMC 1\n";
+
+                                                // Duration fallback unit alias as requested earlier
+                                                out << "using quantum_epochs = std::chrono::duration<double>;\n\n";
+                                            }
+
+                                            // [REPLACE] the first-pipeline emitScheduler(...) to route to ThreadPool when enabled
+                                            static void emitScheduler(std::ostringstream& out, Node* scheduleNode) {
+                                                std::string pr = scheduleNode->value.empty() ? "0" : scheduleNode->value;
+
+                                                if (gOverlayThreads) {
+                                                    // Packetized async execution
+                                                    out << "{ /* scheduled pr=" << pr << " (threaded) */\n";
+                                                    // Configure pool once per TU usage
+                                                    out << "ThreadPool::instance().configure(" << (gPacketSize > 0 ? gPacketSize : 1) << ", "
+                                                        << (gOverlayAutoscale ? "true" : "false") << ", 0);\n";
+                                                    out << "ThreadPool::instance().enqueue([=](){\n";
+                                                    if (!scheduleNode->children.empty()) emitChildren(scheduleNode->children[0]->children, out);
+                                                    out << "});\n";
+                                                    out << "}\n";
+                                                    return;
+                                                }
+
+                                                // Baseline single-threaded path
+                                                out << "{ struct __Task{int pr; std::function<void()> fn;}; std::vector<__Task> __sched;\n";
+                                                out << "__sched.push_back(__Task{" << pr << ", [=](){\n";
+                                                if (!scheduleNode->children.empty()) emitChildren(scheduleNode->children[0]->children, out);
+                                                out << "}});\n";
+                                                out << "std::sort(__sched.begin(), __sched.end(), [](const __Task&a,const __Task&b){return a.pr>b.pr;});\n";
+                                                out << "for (auto& t: __sched) t.fn(); }\n";
+                                            }
+
+                                            // [MODIFY] In the first-pipeline Program emission inside emitNode(...)
+                                            if (n->type == "Program") {
+                                                emitPrelude(out);
+                                                // Emit function definitions first
+                                                for (auto* c : n->children)
+                                                    if (c->type == "Fn") emitNode(c, out);
+                                                out << "int main(){\n";
+                                                // Init terminal and pool if overlays require
+                                                if (gOverlayNcurses) { out << "termui::init();\n"; }
+                                                if (gOverlayThreads) {
+                                                    out << "ThreadPool::instance().configure(" << (gPacketSize > 0 ? gPacketSize : 1) << ", "
+                                                        << (gOverlayAutoscale ? "true" : "false") << ", 0);\n";
+                                                }
+                                                for (auto* c : n->children)
+                                                    if (c->type != "Fn") emitNode(c, out);
+                                                if (gOverlayNcurses) { out << "termui::shutdown();\n"; }
+                                                out << "return 0;\n}\n";
+                                            }
+
+                                            // [ADD] Place near other globals in the Introspection & Plugin System section (first pipeline)
+                                            static bool gOverlayNcurses = false;
+                                            static bool gOverlayThreads = false;
+                                            static bool gOverlayAutoscale = false;
+                                            static bool gOverlayCompress = false;
+                                            static bool gOverlayIndex = false;
+                                            static bool gOverlayChannelSpsc = false;
+                                            static bool gOverlayChannelMpmc = false;
+                                            static int  gPacketSize = 1;
+
+                                            // [REPLACE] the first-pipeline collectOverlaysFlags(...) with this richer version
+                                            static void collectOverlaysFlags(Node* n) {
+                                                if (!n) return;
+                                                if (n->type == "Overlay") {
+                                                    std::string low = n->value;
+                                                    std::transform(low.begin(), low.end(), low.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+
+                                                    // existing toggles
+                                                    if (low == "mutate")  gEnableMutate = true;
+                                                    if (low == "inspect") gEnableInspect = true;
+                                                    if (low == "replay" || low == "audit") gEnableReplay = true;
+
+                                                    // terminal / ncurses
+                                                    if (low == "term" || low == "ncurses") gOverlayNcurses = true;
+
+                                                    // parallelism
+                                                    if (low == "threads" || low == "parallel" || low == "mt") gOverlayThreads = true;
+                                                    if (low == "autoscale") gOverlayAutoscale = true;
+
+                                                    // packetization: packetNN (e.g., packet64)
+                                                    if (low.rfind("packet", 0) == 0 && low.size() > 6) {
+                                                        int v = 0;
+                                                        try { v = std::stoi(low.substr(6)); }
+                                                        catch (...) { v = 0; }
+                                                        if (v > 0) { gPacketSize = v; gOverlayThreads = true; }
+                                                    }
+
+                                                    // channels
+                                                    if (low == "channel_spsc") { gOverlayChannelSpsc = true; gOverlayChannelMpmc = false; }
+                                                    if (low == "channel_mpmc") { gOverlayChannelMpmc = true; gOverlayChannelSpsc = false; }
+
+                                                    // utilities
+                                                    if (low == "compress") gOverlayCompress = true;
+                                                    if (low == "index" || low == "indexer" || low == "indexing") gOverlayIndex = true;
+                                                }
+                                                if (n->type == "Mutate") gEnableMutate = true;
+                                                for (auto* c : n->children) collectOverlaysFlags(c);
+                                            }
+
+                                            // [REPLACE] the first emitPrelude(...) in the file (top-most pipeline)
+                                            static void emitPrelude(std::ostringstream& out) {
+                                                out << "#include <iostream>\n";
+                                                out << "#include <fstream>\n";
+                                                out << "#include <cmath>\n";
+                                                out << "#include <vector>\n";
+                                                out << "#include <deque>\n";
+                                                out << "#include <mutex>\n";
+                                                out << "#include <condition_variable>\n";
+                                                out << "#include <functional>\n";
+                                                out << "#include <algorithm>\n";
+                                                out << "#include <thread>\n";
+                                                out << "#include <atomic>\n";
+                                                out << "#include <queue>\n";
+                                                out << "#include <map>\n";
+                                                out << "#include <chrono>\n";
+                                                out << "#if defined(_OPENMP)\n#include <omp.h>\n#endif\n";
+                                                out << "#if defined(HAVE_NCURSES)\n#include <ncurses.h>\n#endif\n\n";
+
+                                                // Optional compile-time channel selection macros (set from overlays)
+                                                if (gOverlayChannelSpsc) out << "#define CASE_CHANNEL_SPSC 1\n";
+                                                else if (gOverlayChannelMpmc) out << "#define CASE_CHANNEL_MPMC 1\n";
+
+                                                // Terminal helpers (guarded)
+                                                out << "namespace termui {\n";
+                                                out << "inline void init(){\n"
+                                                    "#if defined(HAVE_NCURSES)\n"
+                                                    "initscr(); noecho(); cbreak(); curs_set(0);\n"
+                                                    "#endif\n}\n";
+                                                out << "inline void shutdown(){\n"
+                                                    "#if defined(HAVE_NCURSES)\n"
+                                                    "endwin();\n"
+                                                    "#endif\n}\n}\n\n";
+
+                                                // Barrier (C++14)
+                                                out << "struct Barrier{ std::mutex m; std::condition_variable cv; int total; int count=0; int gen=0; explicit Barrier(int n):total(n){}\n";
+                                                out << "void wait(){ std::unique_lock<std::mutex> lk(m); int g=gen; if(++count==total){ ++gen; count=0; cv.notify_all(); } else cv.wait(lk,[&]{return gen!=g;}); }};\n\n";
+
+                                                // SPSC channel (bounded ring)
+                                                out << "template<typename T>\nclass SpscChannel{ std::vector<T> buf; std::atomic<size_t> head{0}, tail{0}; size_t cap; std::mutex m; std::condition_variable cv; \n";
+                                                out << "public: explicit SpscChannel(size_t c=1024):buf(c),cap(c){}\n";
+                                                out << "  void send(const T& v){ for(;;){ size_t t=tail.load(std::memory_order_relaxed), h=head.load(std::memory_order_acquire); if(((t+1)%cap)!=h){ buf[t]=v; tail.store((t+1)%cap,std::memory_order_release); cv.notify_one(); return; } std::unique_lock<std::mutex> lk(m); cv.wait_for(lk,std::chrono::milliseconds(1)); }}\n";
+                                                out << "  void recv(T& out){ for(;;){ size_t h=head.load(std::memory_order_relaxed), t=tail.load(std::memory_order_acquire); if(h!=t){ out=std::move(buf[h]); head.store((h+1)%cap,std::memory_order_release); return; } std::unique_lock<std::mutex> lk(m); cv.wait_for(lk,std::chrono::milliseconds(1)); }}\n";
+                                                out << "};\n";
+
+                                                // MPMC channel (mutex+cv)
+                                                out << "template<typename T>\nclass MpmcChannel{ std::mutex m; std::condition_variable cv; std::deque<T> q; \n";
+                                                out << "public: void send(const T& v){ std::lock_guard<std::mutex> lk(m); q.push_back(v); cv.notify_one(); }\n";
+                                                out << "  void recv(T& out){ std::unique_lock<std::mutex> lk(m); cv.wait(lk,[&]{return !q.empty();}); out=std::move(q.front()); q.pop_front(); }\n";
+                                                out << "};\n";
+
+                                                // Default Channel alias
+                                                out << "#if defined(CASE_CHANNEL_SPSC)\n";
+                                                out << "template<typename T> using Channel = SpscChannel<T>;\n";
+                                                out << "#elif defined(CASE_CHANNEL_MPMC)\n";
+                                                out << "template<typename T> using Channel = MpmcChannel<T>;\n";
+                                                out << "#else\n";
+                                                out << "template<typename T> using Channel = MpmcChannel<T>;\n";
+                                                out << "#endif\n\n";
+
+                                                // ThreadPool with auto-scaling + packetization
+                                                out << "class ThreadPool{ std::mutex m; std::condition_variable cv; std::deque<std::function<void()>> q; std::vector<std::thread> ws; std::atomic<bool> stop{false}; std::atomic<size_t> pkt{1}; bool autoscale=false; unsigned maxThr=0;\n";
+                                                out << "  void worker(){ for(;;){ std::function<void()> fn; { std::unique_lock<std::mutex> lk(m); cv.wait(lk,[&]{return stop||!q.empty();}); if(stop && q.empty()) return; fn=std::move(q.front()); q.pop_front(); }\n";
+                                                out << "    if(fn) fn(); if(autoscale){ std::lock_guard<std::mutex> lk(m); if(q.size()>ws.size()*4 && (maxThr==0 || ws.size()<maxThr)) ws.emplace_back([this]{worker();}); } } }\n";
+                                                out << "public:\n";
+                                                out << "  static ThreadPool& instance(){ static ThreadPool tp; return tp; }\n";
+                                                out << "  void configure(size_t packet,bool as,unsigned cap){ pkt.store(packet?packet:1); autoscale=as; maxThr=cap; if(ws.empty()){ unsigned n=std::thread::hardware_concurrency(); if(n==0) n=4; unsigned start = as? std::min<unsigned>(n, 8u) : n; for(unsigned i=0;i<start;i++) ws.emplace_back([this]{worker();}); } }\n";
+                                                out << "  template<class F> void enqueue(F&& f){ { std::lock_guard<std::mutex> lk(m); q.emplace_back(std::forward<F>(f)); } cv.notify_one(); }\n";
+                                                out << "  size_t packetSize() const { return pkt.load(); }\n";
+                                                out << "  ~ThreadPool(){ stop=true; cv.notify_all(); for(auto& t:ws) if(t.joinable()) t.join(); }\n";
+                                                out << "};\n\n";
+
+                                                // parallel_for and 2D variant
+                                                out << "template<typename F>\n";
+                                                out << "void parallel_for(size_t begin,size_t end,F fn){ size_t n=(end>begin? end-begin:0); if(n==0) return; size_t packet=ThreadPool::instance().packetSize(); if(packet==0) packet=1; std::atomic<size_t> next{begin}; unsigned w=std::thread::hardware_concurrency(); if(w==0) w=4; Barrier bar((int)w);\n";
+                                                out << " for(unsigned t=0;t<w;++t){ ThreadPool::instance().enqueue([&next,begin,end,packet,fn,&bar]{ for(;;){ size_t i=next.fetch_add(packet); if(i>=end) break; size_t e=std::min(i+packet,end); for(size_t k=i;k<e;++k) fn(k); } bar.wait(); }); }\n";
+                                                out << "}\n\n";
+                                                out << "template<typename F>\n";
+                                                out << "void parallel_for_2d(size_t r0,size_t r1,size_t c0,size_t c1,F fn){ auto body=[&](size_t idx){ size_t R=r1-r0, C=c1-c0; size_t i=idx/C; size_t j=idx% C; fn(r0+i,c0+j); }; size_t N=(r1-r0)*(c1-c0); parallel_for(0,N,body); }\n\n";
+
+                                                // Boilerplate-reducing handle
+                                                out << "template<typename T>\nstruct Handle{ T value; std::function<void(T&)> dtor; Handle()=default; Handle(T v,std::function<void(T&)> d):value(std::move(v)),dtor(std::move(d)){} ~Handle(){ if(dtor) dtor(value);} T* operator->(){return &value;} T& get(){return value;} };\n\n";
+
+                                                // Utilities: RLE compression + Indexer
+                                                out << "namespace util{ inline std::string rle_compress(const std::string& s){ std::string o; o.reserve(s.size()); for(size_t i=0;i<s.size();){ char c=s[i]; size_t j=i+1; while(j<s.size() && s[j]==c && j-i<255) ++j; o.push_back(c); o.push_back(char(j-i)); i=j; } return o; }\n";
+                                                out << "inline std::string rle_decompress(const std::string& s){ std::string o; o.reserve(s.size()*2); for(size_t i=0;i+1<s.size();){ char c=s[i++]; unsigned char n=(unsigned char)s[i++]; o.append(n,c); } return o; }\n";
+                                                out << "struct Indexer{ std::map<std::string,int> m; std::vector<std::string> v; int intern(const std::string& s){ auto it=m.find(s); if(it!=m.end()) return it->second; int id=(int)v.size(); v.push_back(s); m.emplace(s,id); return id; } const std::string& str(int id) const { return v[id]; } };\n}\n\n";
+
+                                                // Duration default unit alias requested earlier
+                                                out << "using quantum_epochs = std::chrono::duration<double>;\n\n";
+                                            }
+
+                                            // [REPLACE] the first-pipeline emitScheduler(...) with threaded + baseline behavior
+                                            static void emitScheduler(std::ostringstream& out, Node* scheduleNode) {
+                                                std::string pr = scheduleNode->value.empty() ? "0" : scheduleNode->value;
+
+                                                if (gOverlayThreads) {
+                                                    out << "{ /* scheduled pr=" << pr << " (threaded) */\n";
+                                                    out << "ThreadPool::instance().configure(" << (gPacketSize > 0 ? gPacketSize : 1) << ", "
+                                                        << (gOverlayAutoscale ? "true" : "false") << ", 0);\n";
+                                                    out << "ThreadPool::instance().enqueue([=](){\n";
+                                                    if (!scheduleNode->children.empty()) emitChildren(scheduleNode->children[0]->children, out);
+                                                    out << "});\n";
+                                                    out << "}\n";
+                                                    return;
+                                                }
+
+                                                // Baseline single-threaded path
+                                                out << "{ struct __Task{int pr; std::function<void()> fn;}; std::vector<__Task> __sched;\n";
+                                                out << "__sched.push_back(__Task{" << pr << ", [=](){\n";
+                                                if (!scheduleNode->children.empty()) emitChildren(scheduleNode->children[0]->children, out);
+                                                out << "}});\n";
+                                                out << "std::sort(__sched.begin(), __sched.end(), [](const __Task&a,const __Task&b){return a.pr>b.pr;});\n";
+                                                out << "for (auto& t: __sched) t.fn(); }\n";
+                                            }
+
+                                            // [EDIT] In the first-pipeline emitNode(...) Program branch, insert initialization and shutdown.
+                                            // Find:
+                                            //   out << "int main(){\n";
+                                            // Insert immediately after:
+                                            if (gOverlayNcurses) { out << "termui::init();\n"; }
+                                            if (gOverlayThreads) {
+                                                out << "ThreadPool::instance().configure(" << (gPacketSize > 0 ? gPacketSize : 1) << ", "
+                                                    << (gOverlayAutoscale ? "true" : "false") << ", 0);\n";
+                                            }
+                                            // Find before:
+                                            //   out << "return 0;\n}\n";
+                                            // Insert just before:
+                                            if (gOverlayNcurses) { out << "termui::shutdown();\n"; }
+
