@@ -1,0 +1,26 @@
+# ciam.def.case
+# CIAM definitions (author macros here)
+# Each CIAM block must be:
+# CIAM <name> { <C.A.S.E. body that returns via `ret` and can use `arg`> } [end]
+
+CIAM sinValue { 
+  # return sine of arg (arg assumed degrees or radians per your convention)
+  ret sin(arg)
+} [end]
+
+CIAM cosValue {
+  ret cos(arg)
+} [end]
+
+CIAM logValue {
+  ret log(arg)
+} [end]
+
+CIAM timestampedLog {
+  # Example CIAM that expands to printing a timestamp + message;
+  # uses arg as the message string
+  let now = 0 # placeholder: expander will emit std::time code in C++ emitter
+  Print "[TS] " [end]
+  Print arg [end]
+  ret 0
+} [end]
