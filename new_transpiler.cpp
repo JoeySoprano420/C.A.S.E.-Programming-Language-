@@ -1129,8 +1129,6 @@ static void builtinTextSink(const char* /*phase*/, const char* /*text*/, size_t 
 
 static bool mutateEvolve(Node*& root, const char* passPoint) {
     if (std::string(passPoint) == "before-opt" || std::string(passPoint) == "after-opt") {
-        optimize(root);
-        optimize(root);
         return true;
     }
     return false;
