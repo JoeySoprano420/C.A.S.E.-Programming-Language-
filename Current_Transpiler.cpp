@@ -12992,3 +12992,528 @@ static void emitNode(Node* n, std::ostringstream& out) {
 else if (n->type == "Match") {
     emitMatch(out, n);
 }
+
+    // Replace isSymbolChar and add readSymbol, extend isKeyword; then use readSymbol in tokenize()
+
+    static bool isSymbolChar(char c) {
+        switch (c) {
+        case '(': case ')': case '{': case '}': case '[': case ']':
+        case '=': case ';': case ',': case '+': case '-': case '*':
+        case '/': case '<': case '>': case '!': case '&': case '|':
+        case '%': case ':': case '?': case '.':
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    static std::string readSymbolToken(const std::string& src, size_t& idx) {
+        static const std::unordered_set<std::string> twoChar = {
+            "<=", ">=", "==", "!=", "&&", "||", "+=", "-=", "*=", "/=", "%=",
+            "++", "--", "->", "::", "<<", ">>", "<<=", ">>=", "&=", "|=", "^="
+        };
+        char c = src[idx];
+        std::string one(1, c);
+        if (idx + 1 < src.size()) {
+            std::string two = one + src[idx + 1];
+            if (twoChar.count(two)) { idx += 2; return two; }
+        }
+        ++idx;
+        return one;
+    }
+
+    std::vector<Token> tokenize(const std::string& src) {
+        std::vector<Token> tokens;
+        size_t i = 0;
+        int line = 1;
+
+        auto push = [&](TokenType t, const std::string& v) { tokens.push_back(Token{ t, v, line }); };
+
+        auto isKeyword = [](const std::string& s) {
+            return
+                // control + functions
+                s == "Print" || s == "ret" || s == "return" || s == "loop" || s == "if" || s == "else" ||
+                s == "Fn" || s == "routine" || s == "call" || s == "let" ||
+                s == "while" || s == "break" || s == "continue" ||
+                s == "switch" || s == "case" || s == "default" || s == "match" ||
+                s == "try" || s == "catch" || s == "throw" ||
+                // overlays + IO + effects
+                s == "overlay" || s == "open" || s == "write" || s == "writeln" ||
+                s == "read" || s == "close" || s == "mutate" ||
+                s == "scale" || s == "bounds" || s == "checkpoint" || s == "vbreak" ||
+                s == "channel" || s == "send" || s == "recv" || s == "sync" ||
+                s == "schedule" ||
+                // types + aggregates
+                s == "class" || s == "extends" || s == "public" || s == "private" || s == "protected" ||
+                s == "struct" || s == "enum" || s == "namespace" ||
+                // meta
+                s == "splice" || s == "duration" || s == "derivative" ||
+                // literals
+                s == "true" || s == "false" || s == "null";
+            };
+
+        auto readNumber = [&](size_t& idx) {
+            size_t start = idx;
+            bool hasDot = false, hasExp = false;
+            if (idx + 1 < src.size() && src[idx] == '0' && (src[idx + 1] == 'x' || src[idx + 1] == 'X')) {
+                idx += 2; while (idx < src.size() && std::isxdigit(static_cast<unsigned char>(src[idx]))) ++idx;
+                return src.substr(start, idx - start);
+            }
+            if (idx + 1 < src.size() && src[idx] == '0' && (src[idx + 1] == 'b' || src[idx + 1] == 'B')) {
+                idx += 2; while (idx < src.size() && (src[idx] == '0' || src[idx] == '1' || src[idx] == '_')) ++idx;
+                return src.substr(start, idx - start);
+            }
+            while (idx < src.size()) {
+                char ch = src[idx];
+                if (std::isdigit(static_cast<unsigned char>(ch)) || ch == '_') { ++idx; continue; }
+                if (!hasDot && ch == '.') { hasDot = true; ++idx; continue; }
+                if (!hasExp && (ch == 'e' || ch == 'E')) {
+                    hasExp = true; ++idx;
+                    if (idx < src.size() && (src[idx] == '+' || src[idx] == '-')) ++idx;
+                    while (idx < src.size() && std::isdigit(static_cast<unsigned char>(src[idx]))) ++idx;
+                    break;
+                }
+                break;
+            }
+            return src.substr(start, idx - start);
+            };
+
+        while (i < src.size()) {
+            char c = src[i];
+            if (c == '\n') { ++line; ++i; continue; }
+            if (c == ' ' || c == '\t' || c == '\r') { ++i; continue; }
+
+            // // or # comments
+            if ((c == '/' && i + 1 < src.size() && src[i + 1] == '/') || c == '#') {
+                if (c == '/') i += 2; else ++i;
+                while (i < src.size() && src[i] != '\n') ++i;
+                continue;
+            }
+
+            if (isIdentStart(c)) {
+                size_t start = i++;
+                while (i < src.size() && isIdentChar(src[i])) ++i;
+                std::string ident = src.substr(start, i - start);
+                push(isKeyword(ident) ? TokenType::KEYWORD : TokenType::IDENT, ident);
+                continue;
+            }
+
+            if (std::isdigit(static_cast<unsigned char>(c))) {
+                std::string num = readNumber(i);
+                push(TokenType::NUMBER, num);
+                continue;
+            }
+
+            if (c == '"') {
+                ++i;
+                std::string acc; bool closed = false;
+                while (i < src.size()) {
+                    char ch = src[i++];
+                    if (ch == '"') { closed = true; break; }
+                    if (ch == '\\' && i < src.size()) {
+                        char esc = src[i++];
+                        switch (esc) {
+                        case 'n': acc.push_back('\n'); break;
+                        case 't': acc.push_back('\t'); break;
+                        case 'r': acc.push_back('\r'); break;
+                        case '\\': acc.push_back('\\'); break;
+                        case '"': acc.push_back('"'); break;
+                        default: acc.push_back(esc); break;
+                        }
+                    }
+                    else acc.push_back(ch);
+                }
+                if (!closed) throw std::runtime_error("Unterminated string literal at line " + std::to_string(line));
+                push(TokenType::STRING, acc);
+                continue;
+            }
+
+            if (isSymbolChar(c)) {
+                std::string sym = readSymbolToken(src, i);
+                push(TokenType::SYMBOL, sym);
+                continue;
+            }
+
+            throw std::runtime_error(std::string("Unexpected character '") + c + "' at line " + std::to_string(line));
+        }
+
+        tokens.push_back(Token{ TokenType::END, "", line });
+        return tokens;
+    }
+
+    // Add forward decls near the other fwd declarations
+    static Node* parseAssignmentOrIncDec();
+    static Node* parseMatch();
+    static Node* parseTry();
+    static Node* parseThrow();
+    static Node* parseSplice();
+    static Node* parseDuration();
+    static Node* parseDerivative();
+
+    // Upgrade precedence
+    static int precedenceOf(const std::string& op) {
+        if (op == "||") return 1;
+        if (op == "&&") return 2;
+        if (op == "==" || op == "!=") return 3;
+        if (op == "<" || op == ">" || op == "<=" || op == ">=") return 4;
+        if (op == "+" || op == "-") return 5;
+        if (op == "*" || op == "/" || op == "%") return 6;
+        return -1;
+    }
+
+    // Unary supports ! and -
+    static Node* parseUnary() {
+        if (checkValue("!") || checkValue("-")) {
+            std::string op = advanceTok().value;
+            Node* rhs = parseUnary();
+            Node* u = new Node{ "Unary", op };
+            u->children.push_back(rhs);
+            return u;
+        }
+        return parsePrimary();
+    }
+
+    // Optional: booleans in primary
+    static Node* parsePrimary() {
+        if (peek().type == TokenType::NUMBER) return new Node{ "Num", advanceTok().value };
+        if (peek().type == TokenType::STRING) return new Node{ "Str", advanceTok().value };
+        if (peek().type == TokenType::KEYWORD && (peek().value == "true" || peek().value == "false")) {
+            std::string v = advanceTok().value == "true" ? "1" : "0";
+            return new Node{ "Num", v };
+        }
+        if (peek().type == TokenType::IDENT) return new Node{ "Var", advanceTok().value };
+        if (checkValue("(")) {
+            advanceTok();
+            Node* inner = parseExpression();
+            if (!matchValue(")")) throw std::runtime_error("Expected ')' in expression at line " + std::to_string(peek().line));
+            return inner;
+        }
+        throw std::runtime_error("Expected expression at line " + std::to_string(peek().line));
+    }
+
+    // Assignment and ++/-- (statement-form)
+    static Node* parseAssignmentOrIncDec() {
+        size_t save = pos;
+        if (peek().type != TokenType::IDENT) return nullptr;
+        Node* lhs = new Node{ "Var", advanceTok().value }; // keep simple lvalue
+
+        // ++ or -- (postfix)
+        if (peek().type == TokenType::SYMBOL && (peek().value == "++" || peek().value == "--")) {
+            std::string op = advanceTok().value;
+            Node* one = new Node{ "Num", "1" };
+            Node* asn = new Node{ "Assign", op == "++" ? "+=" : "-=" };
+            asn->children.push_back(lhs);
+            asn->children.push_back(one);
+            return asn;
+        }
+
+        // =, +=, -=, *=, /=, %=
+        if (peek().type == TokenType::SYMBOL &&
+            (peek().value == "=" || peek().value == "+=" || peek().value == "-=" ||
+                peek().value == "*=" || peek().value == "/=" || peek().value == "%=")) {
+            std::string op = advanceTok().value;
+            Node* rhs = parseExpression();
+            Node* asn = new Node{ "Assign", op };
+            asn->children.push_back(lhs);
+            asn->children.push_back(rhs);
+            return asn;
+        }
+
+        pos = save;
+        return nullptr;
+    }
+
+	static void emitStmt(std::ostringstream& out, Node* n) {    
+		if (n->type == "Sleep") {
+			// children[0]=duration, value=unit
+			std::string u = n->value;
+            std::string chronoUnit =
+            (u == "ms" || u == "msec" || u == "millis" || u == "milliseconds") ? "std::chrono::milliseconds" :
+            (u == "s" || u == "sec" || u == "seconds") ? "std::chrono::seconds" :
+				(u == "us" || u == "usec" || u == "microseconds") ? "std::chrono::microseconds" :
+
+                // match <expr> { case <pat>[|<pat>]* {body} ... default {body} }
+                static Node* parseMatch() {
+                advanceTok(); // 'match'
+                Node* scrutExpr = parseExpression();
+                if (!scrutExpr) throw std::runtime_error("Expected expression after 'match' at line " + std::to_string(peek().line));
+                Node* n = new Node{ "Match","" };
+                Node* scrut = new Node{ "Scrut","" };
+                scrut->children.push_back(scrutExpr);
+                n->children.push_back(scrut);
+                if (!matchValue("{")) throw std::runtime_error("Expected '{' after match expression at line " + std::to_string(peek().line));
+
+                auto parsePatternList = [&]() -> Node* {
+                    Node* pats = new Node{ "Pats","" };
+                    bool got = false;
+                    while (true) {
+                        if (peek().type == TokenType::NUMBER) { pats->children.push_back(new Node{ "PatNum", advanceTok().value }); got = true; }
+                        else if (peek().type == TokenType::STRING) { pats->children.push_back(new Node{ "PatStr", advanceTok().value }); got = true; }
+                        else if (peek().type == TokenType::IDENT && peek().value == "_") { advanceTok(); pats->children.push_back(new Node{ "PatWildcard","_" }); got = true; }
+                        else break;
+                        if (matchValue("|") || matchValue(",")) continue;
+                        break;
+                    }
+                    if (!got) throw std::runtime_error("Expected pattern after 'case' at line " + std::to_string(peek().line));
+                    return pats;
+                    };
+
+                while (!checkValue("}") && peek().type != TokenType::END) {
+                    if (matchValue("case")) {
+                        Node* c = new Node{ "Case","" };
+                        c->children.push_back(parsePatternList());
+                        Node* body = parseBlock();
+                        c->children.push_back(body);
+                        n->children.push_back(c);
+                    }
+                    else if (matchValue("default")) {
+                        Node* d = new Node{ "Default","" };
+                        d->children.push_back(parseBlock());
+                        n->children.push_back(d);
+                    }
+                    else {
+                        advanceTok();
+                    }
+                }
+                if (!matchValue("}")) throw std::runtime_error("Expected '}' to close match at line " + std::to_string(peek().line));
+                return n;
+            }
+
+            // try { ... } catch (<ident>){ ... }
+            static Node* parseTry() {
+                advanceTok(); // 'try'
+                Node* t = new Node{ "Try","" };
+                Node* body = parseBlock();
+                t->children.push_back(body);
+                if (matchValue("catch")) {
+                    std::string var;
+                    if (matchValue("(")) {
+                        if (peek().type == TokenType::IDENT) var = advanceTok().value;
+                        if (!matchValue(")")) throw std::runtime_error("Expected ')' after catch parameter at line " + std::to_string(peek().line));
+                    }
+                    Node* c = new Node{ "Catch", var };
+                    c->children.push_back(parseBlock());
+                    t->children.push_back(c);
+                }
+                return t;
+            }
+
+            // throw <expr|string>
+            static Node* parseThrow() {
+                advanceTok(); // 'throw'
+                Node* n = new Node{ "Throw","" };
+                if (peek().type == TokenType::STRING) {
+                    n->children.push_back(new Node{ "Str", advanceTok().value });
+                }
+                else {
+                    n->children.push_back(parseExpression());
+                }
+                return n;
+            }
+
+            // splice "raw C++"
+            static Node* parseSplice() {
+                advanceTok(); // 'splice'
+                if (peek().type != TokenType::STRING) throw std::runtime_error("Expected string after 'splice' at line " + std::to_string(peek().line));
+                Node* n = new Node{ "Splice", advanceTok().value };
+                return n;
+            }
+
+            // duration <expr> "unit"
+            static Node* parseDuration() {
+                advanceTok(); // 'duration'
+                Node* e = parseExpression();
+                if (!e) throw std::runtime_error("Expected expression in 'duration' at line " + std::to_string(peek().line));
+                if (peek().type != TokenType::STRING) throw std::runtime_error("Expected unit string in 'duration' at line " + std::to_string(peek().line));
+                Node* unit = new Node{ "Str", advanceTok().value };
+                Node* n = new Node{ "Duration","" };
+                n->children.push_back(e);
+                n->children.push_back(unit);
+                return n;
+            }
+
+            // derivative <expr> [wrt IDENT]
+            static Node* parseDerivative() {
+                advanceTok(); // 'derivative'
+                Node* e = parseExpression();
+                Node* n = new Node{ "Derivative","" };
+                n->children.push_back(e);
+                if (peek().type == TokenType::IDENT && peek().value == "wrt") {
+                    advanceTok();
+                    if (peek().type != TokenType::IDENT) throw std::runtime_error("Expected identifier after 'wrt' at line " + std::to_string(peek().line));
+                    n->children.push_back(new Node{ "Var", advanceTok().value });
+                }
+                return n;
+            }
+
+            // Hook new statements early in parseStatement()
+            static Node* parseStatement() {
+                // First, assignment/inc/dec if it fits
+                if (peek().type == TokenType::IDENT) {
+                    if (Node* asn = parseAssignmentOrIncDec()) return asn;
+                }
+                const std::string v = peek().value;
+                if (v == "Print")    return parsePrint();
+                if (v == "ret" || v == "return") return parseRet();
+                if (v == "loop")     return parseLoop();
+                if (v == "if")       return parseIf();
+                if (v == "while")    return parseWhile();
+                if (v == "break") { advanceTok(); return new Node{ "Break","" }; }
+                if (v == "continue") { advanceTok(); return new Node{ "Continue","" }; }
+                if (v == "switch")   return parseSwitch();
+                if (v == "match")    return parseMatch();
+                if (v == "try")      return parseTry();
+                if (v == "throw")    return parseThrow();
+                if (v == "Fn")       return parseFn();
+                if (v == "routine") { advanceTok(); return parseFn(); } // alias to Fn
+                if (v == "call")     return parseCall();
+                if (v == "let")      return parseLet();
+                if (v == "overlay")  return parseOverlay();
+                if (v == "open")     return parseOpen();
+                if (v == "write")    return parseWriteLike("Write");
+                if (v == "writeln")  return parseWriteLike("Writeln");
+                if (v == "read")     return parseRead();
+                if (v == "close")    return parseClose();
+                if (v == "mutate")   return parseMutate();
+                if (v == "scale")    return parseScale();
+                if (v == "bounds")   return parseBounds();
+                if (v == "checkpoint") return parseCheckpoint();
+                if (v == "vbreak")   return parseVBreak();
+                if (v == "channel")  return parseChannel();
+                if (v == "send")     return parseSend();
+                if (v == "recv")     return parseRecv();
+                if (v == "schedule") return parseSchedule();
+                if (v == "sync")     return parseSync();
+                if (v == "splice")   return parseSplice();
+                if (v == "duration") return parseDuration();
+                if (v == "derivative") return parseDerivative();
+
+                advanceTok();
+                return new Node{ "Unknown", v };
+            }
+
+            // Extend emitExpr to support Unary and Ternary (safe no-ops if not used)
+            static std::string emitExpr(Node* e) {
+                if (!e) return "0";
+                if (e->type == "Num") return e->value;
+                if (e->type == "Var") return e->value;
+                if (e->type == "Str") return std::string("\"") + escapeCppString(e->value) + "\"";
+                if (e->type == "Unary") return "(" + e->value + "(" + emitExpr(e->children[0]) + "))";
+                if (e->type == "BinOp") {
+                    std::string lhs = emitExpr(e->children.size() > 0 ? e->children[0] : nullptr);
+                    std::string rhs = emitExpr(e->children.size() > 1 ? e->children[1] : nullptr);
+                    return "(" + lhs + " " + e->value + " " + rhs + ")";
+                }
+                if (e->type == "Ternary") {
+                    return "(" + emitExpr(e->children[0]) + " ? " + emitExpr(e->children[1]) + " : " + emitExpr(e->children[2]) + ")";
+                }
+                return "/*expr*/0";
+            }
+
+            // Add branches in emitNode()
+
+else if (n->type == "Assign") {
+                std::string lhs = emitExpr(n->children[0]);
+                std::string rhs = emitExpr(n->children[1]);
+                out << lhs << " " << n->value << " " << rhs << ";\n";
+                }
+else if (n->type == "Match") {
+                    static int __match_counter = 0;
+                    int id = __match_counter++;
+                    std::string scrut = emitExpr(n->children[0]->children[0]);
+                    out << "{ auto __match_tmp_" << id << " = " << scrut << "; bool __matched_" << id << " = false;\n";
+                    for (size_t i = 1; i < n->children.size(); ++i) {
+                        Node* c = n->children[i];
+                        if (c->type == "Case") {
+                            Node* pats = c->children[0];
+                            Node* body = c->children[1];
+                            std::ostringstream cond; bool first = true; bool wild = false;
+                            for (auto* p : pats->children) {
+                                if (p->type == "PatWildcard") { wild = true; continue; }
+                                if (!first) cond << " || ";
+                                if (p->type == "PatNum") cond << "(__match_tmp_" << id << " == " << p->value << ")";
+                                else if (p->type == "PatStr") cond << "(__match_tmp_" << id << " == \"" << escapeCppString(p->value) << "\")";
+                                first = false;
+                            }
+                            if (wild) { out << "if (!__matched_" << id << ") {\n"; }
+                            else { out << "if (!__matched_" << id << " && (" << (first ? "false" : cond.str()) << ")) {\n"; }
+                            out << "__matched_" << id << " = true;\n";
+                            emitChildren(body->children, out);
+                            out << "}\n";
+                        }
+                        else if (c->type == "Default") {
+                            Node* body = c->children[0];
+                            out << "if (!__matched_" << id << ") {\n";
+                            emitChildren(body->children, out);
+                            out << "}\n";
+                        }
+                    }
+                    out << "}\n";
+                    }
+else if (n->type == "Try") {
+                        out << "try{\n";
+                        if (!n->children.empty()) emitChildren(n->children[0]->children, out);
+                        out << "}\n";
+                        if (n->children.size() > 1 && n->children[1]->type == "Catch") {
+                            Node* c = n->children[1];
+                            std::string var = c->value.empty() ? "e" : c->value;
+                            out << "catch(const std::exception& " << var << "){\n";
+                            if (!c->children.empty()) emitChildren(c->children[0]->children, out);
+                            out << "}\n";
+                        }
+                        }
+else if (n->type == "Throw") {
+                            if (!n->children.empty() && n->children[0]->type == "Str") {
+                                out << "throw std::runtime_error(" << "\"" << escapeCppString(n->children[0]->value) << "\"" << ");\n";
+                            }
+                            else {
+                                out << "throw " << emitExpr(n->children.empty() ? nullptr : n->children[0]) << ";\n";
+                            }
+                            }
+else if (n->type == "Splice") {
+                                out << n->value << "\n";
+                                }
+else if (n->type == "Duration") {
+                                    std::string unit = n->children[1]->value;
+                                    std::string u = unit; std::transform(u.begin(), u.end(), u.begin(), ::tolower);
+                                    const char* chronoUnit =
+                                        (u == "ns" || u == "nanoseconds") ? "std::chrono::nanoseconds" :
+                                        (u == "us" || u == "microseconds") ? "std::chrono::microseconds" :
+                                        (u == "ms" || u == "milliseconds") ? "std::chrono::milliseconds" :
+                                        (u == "s" || u == "sec" || u == "seconds") ? "std::chrono::seconds" :
+                                        (u == "m" || u == "min" || u == "minutes") ? "std::chrono::minutes" :
+                                        (u == "h" || u == "hour" || u == "hours") ? "std::chrono::hours" : "std::chrono::milliseconds";
+                                    out << "{ using namespace std::chrono; auto __dur_val = " << emitExpr(n->children[0]) << "; "
+                                        << chronoUnit << " __dur = duration_cast<" << chronoUnit << ">(duration<double>(__dur_val)); (void)__dur; }\n";
+                                        }
+else if (n->type == "Derivative") {
+                                            if (n->children.size() >= 2 && n->children[1]->type == "Var") {
+                                                const std::string var = n->children[1]->value;
+                                                const std::string f = emitExpr(n->children[0]);
+                                                out << "{ auto __eps=1e-6; auto __orig=(" << var << "); "
+                                                    "auto __f0=(double)(" << f << "); " << var << " = __orig + __eps; "
+                                                    "auto __f1=(double)(" << f << "); " << var << " = __orig; "
+                                                    "double __deriv = (__f1-__f0)/__eps; (void)__deriv; }\n";
+                                            }
+                                            else {
+                                                out << "{ /* derivative missing wrt */ double __deriv = 0.0; (void)__deriv; }\n";
+                                            }
+                                            }
+
+                                            // In emitPrelude(), add chrono and stdexcept
+                                            static void emitPrelude(std::ostringstream& out) {
+                                                out << "#include <iostream>\n";
+                                                out << "#include <fstream>\n";
+                                                out << "#include <cmath>\n";
+                                                out << "#include <vector>\n";
+                                                out << "#include <deque>\n";
+                                                out << "#include <mutex>\n";
+                                                out << "#include <condition_variable>\n";
+                                                out << "#include <functional>\n";
+                                                out << "#include <algorithm>\n";
+                                                out << "#include <chrono>\n";
+                                                out << "#include <stdexcept>\n";
+                                                out << "#if defined(_OPENMP)\n#include <omp.h>\n#endif\n";
+                                                // channel template unchanged...
+                                            }
+
