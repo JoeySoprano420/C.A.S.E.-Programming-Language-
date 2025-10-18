@@ -69,7 +69,7 @@ static bool isSymbolChar(char c) {
 }
 
 static void trimInPlace(std::string& s) {
-    auto notspace = [](unsigned char ch){ return !std::isspace(ch); };
+    auto notspace = [](unsigned char ch) { return !std::isspace(ch); };
     s.erase(s.begin(), std::find_if(s.begin(), s.end(), notspace));
     s.erase(std::find_if(s.rbegin(), s.rend(), notspace).base(), s.end());
 }
@@ -82,20 +82,20 @@ std::vector<Token> tokenize(const std::string& src) {
 
     auto push = [&](TokenType t, const std::string& v) {
         tokens.push_back(Token{ t, v, line });
-    };
+        };
 
     auto isKeyword = [](const std::string& s) {
         // Extended keywords for richer control flow, memory, I/O, overlays and systems
         return s == "Print" || s == "ret" || s == "loop" || s == "if" ||
-               s == "else"  || s == "Fn"   || s == "call"|| s == "let" ||
-               s == "while"|| s == "break"|| s == "continue" ||
-               s == "switch"|| s == "case"|| s == "default" ||
-               s == "overlay" || s == "open" || s == "write" || s == "writeln" ||
-               s == "read" || s == "close" || s == "mutate" ||
-               s == "scale" || s == "bounds" || s == "checkpoint" || s == "vbreak" ||
-               s == "channel" || s == "send" || s == "recv" || s == "sync" ||
-               s == "schedule" || s == "input" || s == "true" || s == "false";
-    };
+            s == "else" || s == "Fn" || s == "call" || s == "let" ||
+            s == "while" || s == "break" || s == "continue" ||
+            s == "switch" || s == "case" || s == "default" ||
+            s == "overlay" || s == "open" || s == "write" || s == "writeln" ||
+            s == "read" || s == "close" || s == "mutate" ||
+            s == "scale" || s == "bounds" || s == "checkpoint" || s == "vbreak" ||
+            s == "channel" || s == "send" || s == "recv" || s == "sync" ||
+            s == "schedule" || s == "input" || s == "true" || s == "false";
+        };
 
     auto readNumber = [&](size_t& idx) {
         size_t start = idx++;
@@ -114,7 +114,7 @@ std::vector<Token> tokenize(const std::string& src) {
             break;
         }
         return src.substr(start, idx - start);
-    };
+        };
 
     auto readSymbol = [&](size_t& idx) {
         // Try to read multi-char operators first
@@ -132,7 +132,7 @@ std::vector<Token> tokenize(const std::string& src) {
         }
         ++idx;
         return one;
-    };
+        };
 
     while (i < src.size()) {
         char c = src[i];
@@ -164,7 +164,8 @@ std::vector<Token> tokenize(const std::string& src) {
             std::string ident = src.substr(start, i - start);
             if (isKeyword(ident)) {
                 push(TokenType::KEYWORD, ident);
-            } else {
+            }
+            else {
                 push(TokenType::IDENT, ident);
             }
             continue;
@@ -198,7 +199,8 @@ std::vector<Token> tokenize(const std::string& src) {
                     case '"': acc.push_back('"'); break;
                     default: acc.push_back(esc); break;
                     }
-                } else {
+                }
+                else {
                     acc.push_back(ch);
                 }
             }
@@ -299,8 +301,8 @@ static Node* parseDelimitedBlock(const std::string& open, const std::string& clo
     return body;
 }
 
-static Node* parseBlock()           { return parseDelimitedBlock("{","}"); }
-static Node* parseParenBlock()      { return parseDelimitedBlock("(",")"); }
+static Node* parseBlock() { return parseDelimitedBlock("{", "}"); }
+static Node* parseParenBlock() { return parseDelimitedBlock("(", ")"); }
 
 // Allow Print "..." or Print <expr>
 static Node* parsePrint() {
@@ -308,7 +310,8 @@ static Node* parsePrint() {
     Node* n = new Node{ "Print", "" };
     if (peek().type == TokenType::STRING) {
         n->value = advanceTok().value;
-    } else if (peek().type != TokenType::END && !checkValue("[") && !checkValue("}")) {
+    }
+    else if (peek().type != TokenType::END && !checkValue("[") && !checkValue("}")) {
         Node* expr = parseExpression();
         if (expr) n->children.push_back(expr);
     }
@@ -377,7 +380,7 @@ static Node* parseCallExprFromKeyword() {
         if (checkValue(",")) { advanceTok(); continue; }
         if (checkValue("{") || checkValue("}") || checkValue("[")) break;
     }
-    Node* c = new Node{"CallExpr", fname};
+    Node* c = new Node{ "CallExpr", fname };
     for (auto* a : args) c->children.push_back(a);
     skipBracketBlockIfPresent();
     return c;
@@ -388,7 +391,8 @@ static Node* parseLet() {
     Node* n = new Node{ "Let", "" };
     if (peek().type == TokenType::IDENT) {
         n->value = advanceTok().value; // variable name
-    } else {
+    }
+    else {
         throw std::runtime_error("Expected identifier after 'let' at line " + std::to_string(peek().line));
     }
     if (!matchValue("=")) {
@@ -419,7 +423,7 @@ static Node* parseIf() {
     Node* n = new Node{ "If", "" };
     if (!checkValue("{")) {
         Node* condExpr = parseExpression();
-        Node* cond = new Node{"Cond",""};
+        Node* cond = new Node{ "Cond","" };
         cond->children.push_back(condExpr);
         n->children.push_back(cond);
     }
@@ -437,9 +441,9 @@ static Node* parseIf() {
 
 static Node* parseWhile() {
     advanceTok(); // 'while'
-    Node* n = new Node{"While",""};
+    Node* n = new Node{ "While","" };
     Node* condExpr = parseExpression();
-    Node* cond = new Node{"Cond",""};
+    Node* cond = new Node{ "Cond","" };
     cond->children.push_back(condExpr);
     n->children.push_back(cond);
     Node* body = parseBlock();
@@ -447,34 +451,37 @@ static Node* parseWhile() {
     return n;
 }
 
-static Node* parseBreak() { advanceTok(); skipOptionalSemicolon(); return new Node{"Break",""}; }
-static Node* parseContinue() { advanceTok(); skipOptionalSemicolon(); return new Node{"Continue",""}; }
+static Node* parseBreak() { advanceTok(); skipOptionalSemicolon(); return new Node{ "Break","" }; }
+static Node* parseContinue() { advanceTok(); skipOptionalSemicolon(); return new Node{ "Continue","" }; }
 
 static Node* parseSwitch() {
     advanceTok(); // 'switch'
-    Node* n = new Node{"Switch",""};
+    Node* n = new Node{ "Switch","" };
     Node* condExpr = parseExpression();
-    Node* cond = new Node{"Cond",""};
+    Node* cond = new Node{ "Cond","" };
     cond->children.push_back(condExpr);
     n->children.push_back(cond);
     if (!matchValue("{")) throw std::runtime_error("Expected '{' after switch at line " + std::to_string(peek().line));
     while (!checkValue("}") && peek().type != TokenType::END) {
         if (matchValue("case")) {
-            Node* caseNode = new Node{"Case",""};
+            Node* caseNode = new Node{ "Case","" };
             if (peek().type == TokenType::NUMBER || peek().type == TokenType::STRING || peek().type == TokenType::IDENT) {
                 caseNode->value = advanceTok().value;
-            } else {
+            }
+            else {
                 throw std::runtime_error("Expected case value at line " + std::to_string(peek().line));
             }
             Node* body = parseBlock();
             caseNode->children.push_back(body);
             n->children.push_back(caseNode);
-        } else if (matchValue("default")) {
-            Node* def = new Node{"Default",""};
+        }
+        else if (matchValue("default")) {
+            Node* def = new Node{ "Default","" };
             Node* body = parseBlock();
             def->children.push_back(body);
             n->children.push_back(def);
-        } else {
+        }
+        else {
             advanceTok();
         }
     }
@@ -491,23 +498,24 @@ static Node* parseOverlay() {
         else break;
     }
     skipBracketBlockIfPresent();
-    return new Node{"OverlayDecl",""};
+    return new Node{ "OverlayDecl","" };
 }
 
 // File I/O: open name "path" ["mode"], write name expr, writeln name expr, read name var, close name
 static Node* parseOpen() {
     advanceTok(); // 'open'
     if (peek().type != TokenType::IDENT) throw std::runtime_error("Expected variable after 'open' at line " + std::to_string(peek().line));
-    Node* n = new Node{"Open",""};
+    Node* n = new Node{ "Open","" };
     n->value = advanceTok().value; // var name
     if (peek().type == TokenType::STRING) {
-        Node* path = new Node{"Str", advanceTok().value};
+        Node* path = new Node{ "Str", advanceTok().value };
         n->children.push_back(path);
-    } else {
+    }
+    else {
         throw std::runtime_error("Expected path string in open at line " + std::to_string(peek().line));
     }
     if (peek().type == TokenType::STRING) {
-        Node* mode = new Node{"Str", advanceTok().value};
+        Node* mode = new Node{ "Str", advanceTok().value };
         n->children.push_back(mode);
     }
     skipOptionalSemicolon();
@@ -516,7 +524,7 @@ static Node* parseOpen() {
 }
 static Node* parseWriteLike(const std::string& kind) {
     advanceTok(); // 'write' or 'writeln'
-    Node* n = new Node{kind, ""};
+    Node* n = new Node{ kind, "" };
     if (peek().type != TokenType::IDENT) throw std::runtime_error("Expected stream variable after '" + kind + "' at line " + std::to_string(peek().line));
     n->value = advanceTok().value;
     if (peek().type != TokenType::END && !checkValue("[") && !checkValue("}")) {
@@ -529,11 +537,11 @@ static Node* parseWriteLike(const std::string& kind) {
 }
 static Node* parseRead() {
     advanceTok(); // 'read'
-    Node* n = new Node{"Read",""};
+    Node* n = new Node{ "Read","" };
     if (peek().type != TokenType::IDENT) throw std::runtime_error("Expected stream variable after 'read' at line " + std::to_string(peek().line));
     n->value = advanceTok().value; // stream var
     if (peek().type != TokenType::IDENT) throw std::runtime_error("Expected target variable in 'read' at line " + std::to_string(peek().line));
-    Node* target = new Node{"Var", advanceTok().value};
+    Node* target = new Node{ "Var", advanceTok().value };
     n->children.push_back(target);
     skipOptionalSemicolon();
     skipBracketBlockIfPresent();
@@ -542,7 +550,7 @@ static Node* parseRead() {
 static Node* parseClose() {
     advanceTok(); // 'close'
     if (peek().type != TokenType::IDENT) throw std::runtime_error("Expected stream variable after 'close' at line " + std::to_string(peek().line));
-    Node* n = new Node{"Close", advanceTok().value};
+    Node* n = new Node{ "Close", advanceTok().value };
     skipOptionalSemicolon();
     return n;
 }
@@ -550,7 +558,7 @@ static Node* parseClose() {
 // mutate (compiler-introspection hint)
 static Node* parseMutate() {
     advanceTok(); // 'mutate'
-    Node* n = new Node{"Mutate",""};
+    Node* n = new Node{ "Mutate","" };
     if (peek().type == TokenType::IDENT) n->value = advanceTok().value;
     skipOptionalSemicolon();
     skipBracketBlockIfPresent();
@@ -560,9 +568,9 @@ static Node* parseMutate() {
 // scale x a b c d
 static Node* parseScale() {
     advanceTok(); // 'scale'
-    Node* n = new Node{"Scale",""};
+    Node* n = new Node{ "Scale","" };
     if (!checkType(TokenType::IDENT)) throw std::runtime_error("Expected identifier after 'scale' at line " + std::to_string(peek().line));
-    Node* target = new Node{"Var", advanceTok().value};
+    Node* target = new Node{ "Var", advanceTok().value };
     n->children.push_back(target);
     // parse 4 expressions
     for (int i = 0; i < 4; ++i) {
@@ -578,9 +586,9 @@ static Node* parseScale() {
 // bounds x min max
 static Node* parseBounds() {
     advanceTok(); // 'bounds'
-    Node* n = new Node{"Bounds",""};
+    Node* n = new Node{ "Bounds","" };
     if (!checkType(TokenType::IDENT)) throw std::runtime_error("Expected identifier after 'bounds' at line " + std::to_string(peek().line));
-    Node* var = new Node{"Var", advanceTok().value};
+    Node* var = new Node{ "Var", advanceTok().value };
     n->children.push_back(var);
     Node* mn = parseExpression();
     Node* mx = parseExpression();
@@ -596,7 +604,7 @@ static Node* parseBounds() {
 static Node* parseCheckpoint() {
     advanceTok(); // 'checkpoint'
     if (!checkType(TokenType::IDENT)) throw std::runtime_error("Expected label after 'checkpoint' at line " + std::to_string(peek().line));
-    Node* n = new Node{"Checkpoint", advanceTok().value};
+    Node* n = new Node{ "Checkpoint", advanceTok().value };
     skipOptionalSemicolon();
     skipBracketBlockIfPresent();
     return n;
@@ -606,7 +614,7 @@ static Node* parseCheckpoint() {
 static Node* parseVBreak() {
     advanceTok(); // 'vbreak'
     if (!checkType(TokenType::IDENT)) throw std::runtime_error("Expected label after 'vbreak' at line " + std::to_string(peek().line));
-    Node* n = new Node{"VBreak", advanceTok().value};
+    Node* n = new Node{ "VBreak", advanceTok().value };
     skipOptionalSemicolon();
     skipBracketBlockIfPresent();
     return n;
@@ -616,10 +624,10 @@ static Node* parseVBreak() {
 static Node* parseChannel() {
     advanceTok(); // 'channel'
     if (!checkType(TokenType::IDENT)) throw std::runtime_error("Expected channel name after 'channel' at line " + std::to_string(peek().line));
-    Node* n = new Node{"Channel",""};
+    Node* n = new Node{ "Channel","" };
     n->value = advanceTok().value;
     if (!checkType(TokenType::STRING)) throw std::runtime_error("Expected type string for channel at line " + std::to_string(peek().line));
-    Node* ty = new Node{"Str", advanceTok().value};
+    Node* ty = new Node{ "Str", advanceTok().value };
     n->children.push_back(ty);
     skipOptionalSemicolon();
     skipBracketBlockIfPresent();
@@ -630,7 +638,7 @@ static Node* parseChannel() {
 static Node* parseSend() {
     advanceTok(); // 'send'
     if (!checkType(TokenType::IDENT)) throw std::runtime_error("Expected channel name after 'send' at line " + std::to_string(peek().line));
-    Node* n = new Node{"Send",""};
+    Node* n = new Node{ "Send","" };
     n->value = advanceTok().value;
     Node* e = parseExpression();
     if (!e) throw std::runtime_error("Expected expression in send at line " + std::to_string(peek().line));
@@ -644,10 +652,10 @@ static Node* parseSend() {
 static Node* parseRecv() {
     advanceTok(); // 'recv'
     if (!checkType(TokenType::IDENT)) throw std::runtime_error("Expected channel name after 'recv' at line " + std::to_string(peek().line));
-    Node* n = new Node{"Recv",""};
+    Node* n = new Node{ "Recv","" };
     n->value = advanceTok().value;
     if (!checkType(TokenType::IDENT)) throw std::runtime_error("Expected target variable for recv at line " + std::to_string(peek().line));
-    Node* var = new Node{"Var", advanceTok().value};
+    Node* var = new Node{ "Var", advanceTok().value };
     n->children.push_back(var);
     skipOptionalSemicolon();
     skipBracketBlockIfPresent();
@@ -657,10 +665,11 @@ static Node* parseRecv() {
 // schedule priority { body }
 static Node* parseSchedule() {
     advanceTok(); // 'schedule'
-    Node* n = new Node{"Schedule",""};
+    Node* n = new Node{ "Schedule","" };
     if (checkType(TokenType::NUMBER)) {
         n->value = advanceTok().value;
-    } else {
+    }
+    else {
         n->value = "0";
     }
     Node* body = parseBlock();
@@ -673,10 +682,10 @@ static Node* parseSchedule() {
 static Node* parseSync() {
     advanceTok();
     skipOptionalSemicolon();
-    return new Node{"Sync",""};
+    return new Node{ "Sync","" };
 }
 
-static std::vector<std::pair<std::string,std::string>> parseParamListFromStringFragments(const std::vector<std::string>& frags) {
+static std::vector<std::pair<std::string, std::string>> parseParamListFromStringFragments(const std::vector<std::string>& frags) {
     // Join all fragments with ',' then split by ','
     std::string joined;
     for (size_t i = 0; i < frags.size(); ++i) {
@@ -696,7 +705,8 @@ static std::vector<std::pair<std::string,std::string>> parseParamListFromStringF
                 std::string nm = part.substr(sp + 1);
                 trimInPlace(ty); trimInPlace(nm);
                 if (!nm.empty()) params.emplace_back(ty, nm);
-            } else {
+            }
+            else {
                 params.emplace_back(std::string("auto"), part);
             }
         }
@@ -711,7 +721,8 @@ static Node* parseFn() {
     Node* n = new Node{ "Fn", "" };
     if (peek().type == TokenType::IDENT) {
         n->value = advanceTok().value; // function name
-    } else {
+    }
+    else {
         throw std::runtime_error("Expected function name after 'Fn' at line " + std::to_string(peek().line));
     }
 
@@ -729,7 +740,8 @@ static Node* parseFn() {
             }
             sawParenParams = true;
         }
-    } else if (peek().type == TokenType::STRING) {
+    }
+    else if (peek().type == TokenType::STRING) {
         paramStrFrags.push_back(advanceTok().value);
         while (matchValue(",")) {
             if (peek().type == TokenType::STRING) paramStrFrags.push_back(advanceTok().value);
@@ -738,11 +750,11 @@ static Node* parseFn() {
     }
 
     if (sawParenParams || !paramStrFrags.empty()) {
-        Node* params = new Node{"Params",""};
+        Node* params = new Node{ "Params","" };
         auto pairs = parseParamListFromStringFragments(paramStrFrags);
         for (auto& pr : pairs) {
-            Node* p = new Node{"Param", pr.second}; // value=name
-            Node* ty = new Node{"Type", pr.first};
+            Node* p = new Node{ "Param", pr.second }; // value=name
+            Node* ty = new Node{ "Type", pr.first };
             p->children.push_back(ty);
             params->children.push_back(p);
         }
@@ -751,7 +763,7 @@ static Node* parseFn() {
 
     // Attach pending overlays as children (Overlay nodes)
     for (const auto& ov : gPendingOverlays) {
-        Node* o = new Node{"Overlay", ov};
+        Node* o = new Node{ "Overlay", ov };
         n->children.push_back(o);
     }
     gPendingOverlays.clear();
@@ -789,7 +801,7 @@ static Node* parseLValue() {
             advanceTok();
             Node* idx = parseExpression();
             if (!matchValue("]")) throw std::runtime_error("Expected ']' in index expression at line " + std::to_string(peek().line));
-            Node* idxNode = new Node{"Index",""};
+            Node* idxNode = new Node{ "Index","" };
             idxNode->children.push_back(base);
             idxNode->children.push_back(idx);
             base = idxNode;
@@ -799,7 +811,7 @@ static Node* parseLValue() {
             advanceTok();
             if (!checkType(TokenType::IDENT)) throw std::runtime_error("Expected member name after '.' at line " + std::to_string(peek().line));
             std::string member = advanceTok().value;
-            Node* memNode = new Node{"Member", member};
+            Node* memNode = new Node{ "Member", member };
             memNode->children.push_back(base);
             base = memNode;
             continue;
@@ -830,7 +842,7 @@ static Node* parsePrimary() {
             if (checkValue("(")) {
                 std::vector<Node*> args;
                 parseArgList(args);
-                Node* inv = new Node{"Invoke",""};
+                Node* inv = new Node{ "Invoke","" };
                 inv->children.push_back(acc); // target expression
                 for (auto* a : args) inv->children.push_back(a);
                 acc = inv;
@@ -840,7 +852,7 @@ static Node* parsePrimary() {
                 advanceTok();
                 Node* idx = parseExpression();
                 if (!matchValue("]")) throw std::runtime_error("Expected ']' in index at line " + std::to_string(peek().line));
-                Node* idxNode = new Node{"Index",""};
+                Node* idxNode = new Node{ "Index","" };
                 idxNode->children.push_back(acc);
                 idxNode->children.push_back(idx);
                 acc = idxNode;
@@ -850,7 +862,7 @@ static Node* parsePrimary() {
                 advanceTok();
                 if (!checkType(TokenType::IDENT)) throw std::runtime_error("Expected member after '.' at line " + std::to_string(peek().line));
                 std::string member = advanceTok().value;
-                Node* mem = new Node{"Member", member};
+                Node* mem = new Node{ "Member", member };
                 mem->children.push_back(acc);
                 acc = mem;
                 continue;
@@ -872,7 +884,7 @@ static Node* parseUnary() {
     if (checkValue("!") || checkValue("-")) {
         std::string op = advanceTok().value;
         Node* rhs = parseUnary();
-        Node* u = new Node{"Unary", op};
+        Node* u = new Node{ "Unary", op };
         u->children.push_back(rhs);
         return u;
     }
@@ -910,7 +922,7 @@ static Node* parseExpression() {
         Node* thenE = parseExpression();
         if (!matchValue(":")) throw std::runtime_error("Expected ':' in ternary at line " + std::to_string(peek().line));
         Node* elseE = parseExpression();
-        Node* t = new Node{"Ternary",""};
+        Node* t = new Node{ "Ternary","" };
         t->children.push_back(lhs);
         t->children.push_back(thenE);
         t->children.push_back(elseE);
@@ -922,7 +934,7 @@ static Node* parseExpression() {
 static Node* parseInput() {
     advanceTok(); // 'input'
     if (!checkType(TokenType::IDENT)) throw std::runtime_error("Expected variable after 'input' at line " + std::to_string(peek().line));
-    Node* n = new Node{"Input", advanceTok().value};
+    Node* n = new Node{ "Input", advanceTok().value };
     skipOptionalSemicolon();
     return n;
 }
@@ -937,7 +949,7 @@ static Node* parseAssignmentOrIncDec() {
         std::string op = advanceTok().value;
         Node* lv = parseLValue();
         if (!lv) throw std::runtime_error("Expected lvalue after '" + op + "' at line " + std::to_string(peek().line));
-        Node* n = new Node{"Assign", op};
+        Node* n = new Node{ "Assign", op };
         n->children.push_back(lv);
         skipOptionalSemicolon();
         return n;
@@ -949,7 +961,7 @@ static Node* parseAssignmentOrIncDec() {
         if (!lv) return nullptr;
         if (peek().type == TokenType::SYMBOL && isAssignOp(peek().value)) {
             std::string op = advanceTok().value; // assignment operator
-            Node* n = new Node{"Assign", op};
+            Node* n = new Node{ "Assign", op };
             n->children.push_back(lv);
             if (op != "++" && op != "--") {
                 Node* expr = parseExpression();
@@ -964,8 +976,8 @@ static Node* parseAssignmentOrIncDec() {
             std::string name = advanceTok().value;
             if (peek().type == TokenType::SYMBOL && (checkValue("++") || checkValue("--"))) {
                 std::string op = advanceTok().value;
-                Node* n = new Node{"Assign", op};
-                Node* var = new Node{"Var", name};
+                Node* n = new Node{ "Assign", op };
+                Node* var = new Node{ "Var", name };
                 n->children.push_back(var);
                 skipOptionalSemicolon();
                 return n;
@@ -1113,7 +1125,8 @@ static void analyze(Node* n, std::vector<std::unordered_map<std::string, TypeKin
         if (lhs && lhs->type == "Var") {
             if (n->value == "++" || n->value == "--") {
                 scopes.back()[lhs->value] = TypeKind::Number;
-            } else {
+            }
+            else {
                 TypeKind t = inferExpr(n->children.size() > 1 ? n->children[1] : nullptr, scopes);
                 scopes.back()[lhs->value] = t;
             }
@@ -1268,11 +1281,11 @@ static bool toDouble(const std::string& s, double& out) {
     return endp && *endp == '\0';
 }
 static Node* makeNum(double v) {
-    std::ostringstream ss; ss << v; return new Node{"Num", ss.str()};
+    std::ostringstream ss; ss << v; return new Node{ "Num", ss.str() };
 }
 static Node* clone(Node* n) {
     if (!n) return nullptr;
-    Node* c = new Node{n->type, n->value};
+    Node* c = new Node{ n->type, n->value };
     for (auto* ch : n->children) c->children.push_back(clone(ch));
     return c;
 }
@@ -1307,7 +1320,7 @@ static Node* foldBinop(Node* n) {
     Node* R = n->children[1];
 
     if (n->value == "+" && isStr(L) && isStr(R)) {
-        return new Node{"Str", L->value + R->value};
+        return new Node{ "Str", L->value + R->value };
     }
 
     double a, b;
@@ -1317,8 +1330,8 @@ static Node* foldBinop(Node* n) {
         if (n->value == "*") return makeNum(a * b);
         if (n->value == "/") return makeNum(b == 0 ? 0 : (a / b));
         if (n->value == "%") return makeNum(static_cast<long long>(a) % static_cast<long long>(b));
-        if (n->value == "<")  return makeNum((a <  b) ? 1 : 0);
-        if (n->value == ">")  return makeNum((a >  b) ? 1 : 0);
+        if (n->value == "<")  return makeNum((a < b) ? 1 : 0);
+        if (n->value == ">")  return makeNum((a > b) ? 1 : 0);
         if (n->value == "<=") return makeNum((a <= b) ? 1 : 0);
         if (n->value == ">=") return makeNum((a >= b) ? 1 : 0);
         if (n->value == "==") return makeNum((a == b) ? 1 : 0);
@@ -1411,7 +1424,7 @@ static std::string emitExpr(Node* e) {
         // children[0] = target expression, then args...
         std::ostringstream os;
         os << "(" << emitExpr(e->children[0]) << "(";
-        for (size_t i = 1; i < e->children.size(); ++i) {
+        for (size_t i = 1; i < e->children.size(); i++) {
             if (i > 1) os << ", ";
             os << emitExpr(e->children[i]);
         }
@@ -1454,11 +1467,11 @@ static void emitPrintChain(std::ostringstream& out, Node* expr) {
     if (!expr) { out << "std::cout << std::endl;\n"; return; }
     std::vector<Node*> parts;
     parts.reserve(8);
-    std::function<void(Node*)> flatten = [&](Node* e){
+    std::function<void(Node*)> flatten = [&](Node* e) {
         if (!e) return;
         if (e->type == "BinOp" && e->value == "+") { flatten(e->children[0]); flatten(e->children[1]); }
         else parts.push_back(e);
-    };
+        };
     flatten(expr);
     out << "std::cout";
     if (parts.empty()) {
@@ -1472,7 +1485,7 @@ static void emitPrintChain(std::ostringstream& out, Node* expr) {
 static std::string toIosMode(const std::string& mode) {
     if (mode.empty()) return "std::ios::out";
     std::string m = mode;
-    m.erase(std::remove_if(m.begin(), m.end(), [](unsigned char ch){ return std::isspace(ch); }), m.end());
+    m.erase(std::remove_if(m.begin(), m.end(), [](unsigned char ch) { return std::isspace(ch); }), m.end());
     std::ostringstream os;
     bool first = true;
     size_t start = 0;
@@ -1503,12 +1516,12 @@ static std::string mkCheckpointLabel(const std::string& name) {
 static void processLoopHeaderHints(const std::string& raw, std::string& pragmas, std::string& cleaned) {
     cleaned = raw;
     pragmas.clear();
-    auto erase_all = [&](const std::string& pat){
+    auto erase_all = [&](const std::string& pat) {
         size_t pos = 0;
         while ((pos = cleaned.find(pat, pos)) != std::string::npos) {
             cleaned.erase(pos, pat.size());
         }
-    };
+        };
     // @omp
     if (cleaned.find("@omp") != std::string::npos) {
         pragmas += "#if defined(_OPENMP)\n#pragma omp parallel for\n#endif\n";
@@ -1531,7 +1544,8 @@ static void processLoopHeaderHints(const std::string& raw, std::string& pragmas,
             trimInPlace(n);
             pragmas += "#pragma unroll " + n + "\n";
             cleaned.erase(up, (rp - up) + 1);
-        } else {
+        }
+        else {
             erase_all("@unroll");
         }
     }
@@ -1540,7 +1554,7 @@ static void processLoopHeaderHints(const std::string& raw, std::string& pragmas,
 
 static std::string mapTypeToCpp(const std::string& ty) {
     std::string low = ty;
-    std::transform(low.begin(), low.end(), low.begin(), [](unsigned char c){ return char(std::tolower(c)); });
+    std::transform(low.begin(), low.end(), low.begin(), [](unsigned char c) { return char(std::tolower(c)); });
     if (low == "int") return "int";
     if (low == "double") return "double";
     if (low == "float") return "float";
@@ -1561,6 +1575,11 @@ static void emitScheduler(std::ostringstream& out, Node* scheduleNode) {
 }
 
 static void emitPrelude(std::ostringstream& out) {
+    // Metadata banner (JSON) embedded as comment + global string
+    const std::string meta = getMetadataJson();
+    out << "/* CASE metadata: " << meta << " */\n";
+    out << "static const char* __CASE_METADATA = R\"(" << meta << ")\";\n";
+
     out << "#include <iostream>\n";
     out << "#include <fstream>\n";
     out << "#include <cmath>\n";
@@ -1580,278 +1599,116 @@ static void emitPrelude(std::ostringstream& out) {
     out << "};\n\n";
 }
 
-static void emitNode(Node* n, std::ostringstream& out) {
-    if (n->type == "Program") {
-        emitPrelude(out);
-        // Emit function definitions first
-        for (auto* c : n->children)
-            if (c->type == "Fn") emitNode(c, out);
-        out << "int main(){\n";
-        for (auto* c : n->children)
-            if (c->type != "Fn") emitNode(c, out);
-        out << "return 0;\n}\n";
-    }
-    else if (n->type == "Print") {
-        if (!n->children.empty()) {
-            emitPrintChain(out, n->children[0]);
-        } else {
-            out << "std::cout << \"" << escapeCppString(n->value) << "\" << std::endl;\n";
-        }
-    }
-    else if (n->type == "Input") {
-        out << "std::cin >> " << n->value << ";\n";
-    }
-    else if (n->type == "Loop") {
-        std::string header = n->value, pragmas, cleaned;
-        processLoopHeaderHints(header, pragmas, cleaned);
-        if (!pragmas.empty()) out << pragmas;
-        out << "for(" << (cleaned.empty() ? header : cleaned) << "){\n";
-        if (!n->children.empty()) emitChildren(n->children[0]->children, out);
-        out << "}\n";
-    }
-    else if (n->type == "While") {
-        std::string cond = n->children[0]->children.empty() ? "true" : emitExpr(n->children[0]->children[0]);
-        out << "while(" << cond << "){\n";
-        if (n->children.size() > 1) emitChildren(n->children[1]->children, out);
-        out << "}\n";
-    }
-    else if (n->type == "Break") {
-        out << "break;\n";
-    }
-    else if (n->type == "Continue") {
-        out << "continue;\n";
-    }
-    else if (n->type == "If") {
-        std::string cond = "/* condition */";
-        size_t bodyIdx = 0;
-        if (!n->children.empty() && n->children[0]->type == "Cond") {
-            cond = emitExpr(n->children[0]->children[0]);
-            bodyIdx = 1;
-        }
-        out << "if(" << cond << "){\n";
-        if (n->children.size() > bodyIdx) emitChildren(n->children[bodyIdx]->children, out);
-        out << "}\n";
-        if (n->children.size() > bodyIdx + 1) {
-            out << "else{\n";
-            emitChildren(n->children[bodyIdx + 1]->children, out);
-            out << "}\n";
-        }
-    }
-    else if (n->type == "Switch") {
-        std::string cond = (n->children.empty() ? "0" : emitExpr(n->children[0]->children[0]));
-        out << "switch(" << cond << "){\n";
-        for (size_t i = 1; i < n->children.size(); ++i) {
-            Node* c = n->children[i];
-            if (c->type == "Case") {
-                out << "case " << c->value << ":\n";
-                if (!c->children.empty()) emitChildren(c->children[0]->children, out);
-                out << "break;\n";
-            } else if (c->type == "Default") {
-                out << "default:\n";
-                if (!c->children.empty()) emitChildren(c->children[0]->children, out);
-            }
-        }
-        out << "}\n";
-    }
-    else if (n->type == "Fn") {
-        std::vector<std::string> overlays;
-        Node* params = nullptr;
-        Node* body = nullptr;
-        for (auto* ch : n->children) {
-            if (ch->type == "Overlay") overlays.push_back(ch->value);
-            else if (ch->type == "Params") params = ch;
-            else if (ch->type == "Body") body = ch;
-        }
-        // Build signature: auto name(<typed params>)
-        out << "auto " << n->value << "(";
-        if (params) {
-            for (size_t i = 0; i < params->children.size(); ++i) {
-                if (i) out << ",";
-                Node* p = params->children[i];
-                std::string name = p->value;
-                std::string ty = (!p->children.empty() ? p->children[0]->value : "auto");
-                out << mapTypeToCpp(ty) << " " << name;
-            }
-        }
-        out << ")";
-        out << "{\n";
-        for (const auto& ov : overlays) {
-            out << "/* overlay: " << ov << " */\n";
-        }
-        if (body) emitChildren(body->children, out);
-        out << "}\n";
-    }
-    else if (n->type == "Call") {
-        if (n->children.empty()) {
-            out << n->value << "();\n";
-        } else {
-            out << n->value << "(";
-            for (size_t i = 0; i < n->children.size(); ++i) {
-                if (i) out << ", ";
-                out << emitExpr(n->children[i]);
-            }
-            out << ");\n";
-        }
-    }
-    else if (n->type == "Open") {
-        std::string var = n->value;
-        std::string path = (!n->children.empty() ? n->children[0]->value : "");
-        std::string mode = (n->children.size() > 1 ? n->children[1]->value : "out");
-        out << "std::fstream " << var << "(" << "\"" << escapeCppString(path) << "\"" << ", " << toIosMode(mode) << ");\n";
-    }
-    else if (n->type == "Write" || n->type == "Writeln") {
-        std::string var = n->value;
-        if (!n->children.empty()) {
-            out << var << " << " << emitExpr(n->children[0]) << ";\n";
-        }
-        if (n->type == "Writeln") out << var << " << std::endl;\n";
-    }
-    else if (n->type == "Read") {
-        std::string var = n->value;
-        std::string target = (!n->children.empty() ? n->children[0]->value : "");
-        out << var << " >> " << target << ";\n";
-    }
-    else if (n->type == "Close") {
-        out << n->value << ".close();\n";
-    }
-    else if (n->type == "Let") {
-        if (n->children.empty()) {
-            out << "/* invalid let */\n";
-        } else {
-            out << "auto " << n->value << " = " << emitExpr(n->children[0]) << ";\n";
-        }
-    }
-    else if (n->type == "Assign") {
-        std::string lhs = emitExpr(n->children[0]);
-        if (n->value == "++" || n->value == "--") {
-            out << lhs << n->value << ";\n";
-        } else {
-            std::string rhs = n->children.size() > 1 ? emitExpr(n->children[1]) : "0";
-            out << lhs << " " << n->value << " " << rhs << ";\n";
-        }
-    }
-    else if (n->type == "Ret") {
-        if (n->children.empty()) out << "return;\n";
-        else out << "return " << emitExpr(n->children[0]) << ";\n";
-    }
-    else if (n->type == "Mutate") {
-        out << "/* mutation requested: " << n->value << " */\n";
-    }
-    else if (n->type == "Scale") {
-        std::string x = n->children[0]->value;
-        std::string a = emitExpr(n->children[1]);
-        std::string b = emitExpr(n->children[2]);
-        std::string c = emitExpr(n->children[3]);
-        std::string d = emitExpr(n->children[4]);
-        out << "{ auto __t = ((" << x << ") - (" << a << ")) / ((" << b << ") - (" << a << ")); "
-            << x << " = (" << c << ") + __t * ((" << d << ") - (" << c << ")); }\n";
-    }
-    else if (n->type == "Bounds") {
-        std::string x = n->children[0]->value;
-        std::string mn = emitExpr(n->children[1]);
-        std::string mx = emitExpr(n->children[2]);
-        out << "if((" << x << ")<(" << mn << ")) " << x << "=(" << mn << ");\n";
-        out << "if((" << x << ")>(" << mx << ")) " << x << "=(" << mx << ");\n";
-    }
-    else if (n->type == "Checkpoint") {
-        out << mkCheckpointLabel(n->value) << ":\n";
-    }
-    else if (n->type == "VBreak") {
-        out << "goto " << mkCheckpointLabel(n->value) << ";\n";
-    }
-    else if (n->type == "Channel") {
-        std::string ty = n->children[0]->value;
-        out << "Channel<" << ty << "> " << n->value << ";\n";
-    }
-    else if (n->type == "Send") {
-        out << n->value << ".send(" << emitExpr(n->children[0]) << ");\n";
-    }
-    else if (n->type == "Recv") {
-        out << n->value << ".recv(" << n->children[0]->value << ");\n";
-    }
-    else if (n->type == "Schedule") {
-        emitScheduler(out, n);
-    }
-    else if (n->type == "Sync") {
-#if defined(_OPENMP)
-        out << "#pragma omp barrier\n";
-#else
-        out << "/* sync barrier (no-op) */\n";
-#endif
-    }
-    else {
-        out << "/* Unknown: " << n->type << " " << n->value << " */\n";
-    }
-}
-
-std::string emitCPP(Node* root) {
-    std::ostringstream out;
-    out.str().reserve(1 << 20);
-    emitNode(root, out);
-    return out.str();
-}
-
-// ------------------------ Driver ------------------------
-
-static bool runCmd(const std::string& cmd) {
-    int rc = std::system(cmd.c_str());
-    return rc == 0;
-}
-
-static std::string quote(const std::string& s) {
+static ProcResult runProcessCapture(const std::string& cmd) {
 #if defined(_WIN32)
-    return "\"" + s + "\"";
+    std::string full = cmd + " 2>&1";
+    FILE* pipe = _popen(full.c_str(), "r");
+    if (!pipe) return { -1, "failed to start: " + cmd };
+    std::string out;
+    char buf[4096];
+    while (size_t n = std::fread(buf, 1, sizeof(buf), pipe)) out.append(buf, n);
+    int rc = _pclose(pipe);
+    return { rc, out };
 #else
-    return "'" + s + "'";
+    std::string full = cmd + " 2>&1";
+    FILE* pipe = popen(full.c_str(), "r");
+    if (!pipe) return { -1, "failed to start: " + cmd };
+    std::string out;
+    char buf[4096];
+    while (size_t n = std::fread(buf, 1, sizeof(buf), pipe)) out.append(buf, n);
+    int rc = pclose(pipe);
+    return { rc, out };
 #endif
 }
 
-static void tryNativeBuild(const std::string& outExe) {
+static bool tryNativeBuild(const std::string& outExe, const BuildConfig& cfg, const std::string& sourceCpp) {
     const char* noCompile = std::getenv("CASEC_NO_COMPILE");
-    if (noCompile && std::string(noCompile) == "1") return;
+    if (noCompile && std::string(noCompile) == "1") return true;
+
+    auto fmtStd = [&]()->std::string {
+        if (cfg.stdver == "c++17") return "-std=c++17";
+        if (cfg.stdver == "c++20") return "-std=c++20";
+        return "-std=c++14";
+    };
 
 #if defined(_WIN32)
-    // Try clang-cl first
-    std::ostringstream clir;
-    clir << "clang-cl /std:c++14 /O2 /GL /openmp /DNDEBUG /EHsc "
-         << quote("compiler.cpp") << " /link /OUT:" << quote(outExe);
-    if (!runCmd(clir.str())) {
-        // Fallback to clang++
-        std::ostringstream cc;
-        cc << "clang++ -std=c++14 -O3 -flto -march=native -DNDEBUG -fopenmp "
-           << quote("compiler.cpp") << " -o " << quote(outExe);
-        runCmd(cc.str());
+    // Prefer clang-cl, allow override via cfg.cc
+    std::string cc = cfg.cc.empty() ? "clang-cl" : cfg.cc;
+    ProcResult pr{0,""};
+    if (cc == "clang-cl") {
+        std::ostringstream clir;
+        clir << "clang-cl /EHsc /DNDEBUG /openmp "
+             << "/O" << (cfg.opt.empty() ? "2" : cfg.opt.substr(1)) << " "
+             << "/std:" << (cfg.stdver.empty() ? "c++14" : cfg.stdver) << " "
+             << quote(sourceCpp) << " /link /OUT:" << quote(outExe);
+        pr = runProcessCapture(clir.str());
+        if (pr.exitCode != 0) {
+            // Fallback to clang++
+            std::ostringstream cc2;
+            cc2 << "clang++ " << fmtStd() << " -" << (cfg.opt.empty() ? "O2" : cfg.opt)
+                << " -fopenmp -DNDEBUG " << quote(sourceCpp) << " -o " << quote(outExe);
+            pr = runProcessCapture(cc2.str());
+        }
+    } else if (cc == "cl") {
+        std::ostringstream clir;
+        clir << "cl /EHsc /nologo /DNDEBUG /openmp "
+             << "/O" << (cfg.opt.empty() ? "2" : cfg.opt.substr(1)) << " "
+             << "/std:" << (cfg.stdver.empty() ? "c++14" : cfg.stdver) << " "
+             << quote(sourceCpp) << " /Fe" << quote(outExe);
+        pr = runProcessCapture(clir.str());
+    } else {
+        // Use provided cc directly
+        std::ostringstream any;
+        any << cc << " " << fmtStd() << " -" << (cfg.opt.empty() ? "O2" : cfg.opt)
+            << " -fopenmp -DNDEBUG " << quote(sourceCpp) << " -o " << quote(outExe);
+        pr = runProcessCapture(any.str());
     }
-    // Emit LLVM IR (best effort)
-    std::ostringstream ir;
-    ir << "clang++ -std=c++14 -S -emit-llvm " << quote("compiler.cpp") << " -o " << quote("compiler.ll");
-    runCmd(ir.str());
+    std::cout << pr.output;
+    return pr.exitCode == 0;
 #else
-    std::ostringstream ir;
-    ir << "clang++ -std=c++14 -S -emit-llvm " << quote("compiler.cpp") << " -o " << quote("compiler.ll");
-    runCmd(ir.str());
-    std::ostringstream cc;
-    cc << "clang++ -std=c++14 -O3 -flto -march=native -fopenmp -DNDEBUG "
-       << quote("compiler.cpp") << " -o " << quote(outExe);
-    runCmd(cc.str());
+    std::string cc = cfg.cc.empty() ? "clang++" : cfg.cc;
+    std::ostringstream cmd;
+    cmd << cc << " " << fmtStd() << " -" << (cfg.opt.empty() ? "O2" : cfg.opt)
+        << " -flto -march=native -fopenmp -DNDEBUG "
+        << quote(sourceCpp) << " -o " << quote(outExe);
+    ProcResult pr = runProcessCapture(cmd.str());
+    std::cout << pr.output;
+    return pr.exitCode == 0;
 #endif
 }
 
 int main(int argc, char** argv) {
     if (argc < 2) {
-        std::cerr << "Usage: transpiler <input.case> [-o out_exe]\n";
+        std::cerr << "Usage: transpiler <input.case> [-o out_exe] [--std=c++14|c++17|c++20] [--opt=O0|O1|O2|O3] [--cc=<compiler>] [--tag key=value]\n";
         return 1;
     }
     std::string outExe = "program.exe";
 #if !defined(_WIN32)
     outExe = "program.out";
 #endif
+    gBuild.stdver = "c++14";
+    gBuild.opt = "O2";
     for (int i = 2; i < argc; ++i) {
         std::string a = argv[i];
         if (a == "-o" && i + 1 < argc) {
             outExe = argv[++i];
+        } else if (a.rfind("--std=", 0) == 0) {
+            gBuild.stdver = a.substr(6);
+        } else if (a.rfind("--opt=", 0) == 0) {
+            gBuild.opt = a.substr(6);
+        } else if (a.rfind("--cc=", 0) == 0) {
+            gBuild.cc = a.substr(5);
+        } else if (a == "--tag" && i + 1 < argc) {
+            std::string kv = argv[++i];
+            size_t eq = kv.find('=');
+            if (eq != std::string::npos) setMeta(kv.substr(0, eq), kv.substr(eq + 1));
         }
     }
+
+    gSourcePath = argv[1]; // used for #line mapping
+    setMeta("source", gSourcePath);
+    setMeta("std", gBuild.stdver);
+    setMeta("opt", gBuild.opt);
 
     std::ifstream f(argv[1], std::ios::binary);
     if (!f) {
@@ -1861,14 +1718,11 @@ int main(int argc, char** argv) {
     std::string src((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
 
     try {
-        // Load previously persisted macros
         ciam::MacroRegistry::load();
 
-        // Preprocess with CIAM features (enabled only when source contains: call CIAM[on])
         ciam::Preprocessor ciamPre;
         src = ciamPre.Process(src);
 
-        // Init plugins/overlays system
         initPluginsOnce();
 
         // Lex
@@ -1881,28 +1735,28 @@ int main(int argc, char** argv) {
 
         // Parse
         Node* ast = parseProgram(tokens);
-        emitEventAst("parsed", ast);
+        hookInspect("parsed", ast);
 
-        // Collect overlays to enable CIAM-like behaviors (also registers overlay macros)
+        // Collect overlays (and emit overlay macros)
         collectOverlaysFlags(ast);
 
-        // Analyze types
+        // Basic analyze
         std::vector<std::unordered_map<std::string, TypeKind>> scopes;
         analyze(ast, scopes);
-        emitEventAst("analyzed", ast);
+        hookInspect("analyzed", ast);
 
-        // Plugin transforms before optimize
-        runTransforms("before-opt", ast);
+        // Allow mutators to run early (instrumentation, rewrites)
+        hookMutate("pre-opt", ast);
 
         // Optimize
         optimize(ast);
-        emitEventAst("optimized", ast);
+        hookInspect("optimized", ast);
 
-        // Plugin transforms after optimize
-        runTransforms("after-opt", ast);
+        // Allow mutators post-opt (final shaping before emit)
+        hookMutate("post-opt", ast);
 
         // Emit C++
-        emitEventAst("before-emit", ast);
+        hookInspect("before-emit", ast);
         std::string cpp = emitCPP(ast);
         emitEventText("emitted-cpp", cpp);
 
@@ -1912,15 +1766,17 @@ int main(int argc, char** argv) {
             return 1;
         }
         out << cpp;
+        out.close();
         std::cout << "[OK] Generated compiler.cpp\n";
+        hookInspect("after-emit", ast);
 
-        // Persist macros after this run (captures overlay-driven or fixer macros)
         ciam::MacroRegistry::persist();
 
-        // Attempt native build with aggressive flags (best-effort; optional)
-        tryNativeBuild(outExe);
+        // Compile native with desired flags, capture diagnostics
+        if (!tryNativeBuild(outExe, gBuild, "compiler.cpp")) {
+            std::cerr << "[warn] native build failed\n";
+        }
 
-        // Write symbolic replay if enabled
         if (gEnableReplay) {
             std::ofstream replay("replay.txt", std::ios::binary);
             if (replay) {
@@ -1940,3 +1796,2356 @@ int main(int argc, char** argv) {
     }
 }
 
+
+// [ADDED] Stronger type system + overlay-driven semantic constraints
+
+// ---- Type system extensions ----
+enum class TypeKindEx { Unknown, Number, String, Boolean };
+
+static TypeKindEx mapDeclaredTypeToKindEx(const std::string& ty) {
+    std::string low = ty;
+    std::transform(low.begin(), low.end(), low.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+    if (low == "int" || low == "double" || low == "float" || low == "number" || low == "auto") return TypeKindEx::Number;
+    if (low == "bool" || low == "boolean") return TypeKindEx::Boolean;
+    if (low.find("string") != std::string::npos) return TypeKindEx::String;
+    return TypeKindEx::Unknown;
+}
+
+static TypeKindEx inferExprStrong(Node* e,
+    const std::vector<std::unordered_map<std::string, TypeKindEx>>& scopes) {
+    if (!e) return TypeKindEx::Unknown;
+    if (e->type == "Num") return TypeKindEx::Number;
+    if (e->type == "Str") return TypeKindEx::String;
+    if (e->type == "Unary") return TypeKindEx::Number; // treat as numeric context
+    if (e->type == "Ternary") {
+        TypeKindEx a = inferExprStrong(e->children[1], scopes);
+        TypeKindEx b = inferExprStrong(e->children[2], scopes);
+        if (a == TypeKindEx::String || b == TypeKindEx::String) return TypeKindEx::String;
+        if (a == TypeKindEx::Number || b == TypeKindEx::Number) return TypeKindEx::Number;
+        return TypeKindEx::Unknown;
+    }
+    if (e->type == "BinOp") {
+        TypeKindEx L = inferExprStrong(e->children[0], scopes);
+        TypeKindEx R = inferExprStrong(e->children[1], scopes);
+        const std::string& op = e->value;
+        auto isArith = [&](const std::string& s) { return s == "-" || s == "*" || s == "/" || s == "%"; };
+        auto isRel = [&](const std::string& s) { return s == "<" || s == ">" || s == "<=" || s == ">=" || s == "==" || s == "!="; };
+        if (op == "+") {
+            // ok for number+number or string+string; else flag
+            if (!((L == TypeKindEx::Number && R == TypeKindEx::Number) ||
+                (L == TypeKindEx::String && R == TypeKindEx::String))) {
+                reportSemError("Operator '+' requires both Number or both String operands");
+            }
+        }
+        else if (isArith(op)) {
+            if (!(L == TypeKindEx::Number && R == TypeKindEx::Number)) {
+                reportSemError("Arithmetic operator '" + op + "' requires Number operands");
+            }
+        }
+        else if (isRel(op)) {
+            if (!(L == TypeKindEx::Number && R == TypeKindEx::Number)) {
+                reportSemError("Relational operator '" + op + "' requires Number operands");
+            }
+        }
+    }
+    for (auto* c : e->children) strongTypeCheckExpr(c, typeScopes);
+}
+
+// ---- Function model + overlay constraints ----
+struct FunctionInfo {
+    std::string name;
+    std::vector<std::pair<std::string, TypeKindEx>> params; // {name, kind}
+    bool pure = false;                                       // overlay: pure
+    std::unordered_set<std::string> nonnegParams;            // overlay: nonneg_<param>
+};
+
+static std::unordered_map<std::string, FunctionInfo> gFunctions;
+
+// Extract function signature and overlay constraints (supports: "pure" and "nonneg_<paramName>")
+static void collectFunctionsAndConstraints(Node* root) {
+    gFunctions.clear();
+    if (!root) return;
+    std::function<void(Node*)> walk = [&](Node* n) {
+        if (!n) return;
+        if (n->type == "Fn") {
+            FunctionInfo fi;
+            fi.name = n->value;
+            for (auto* ch : n->children) {
+                if (ch->type == "Params") {
+                    for (auto* p : ch->children) {
+                        std::string pname = p->value;
+                        std::string pty = (!p->children.empty() ? p->children[0]->value : "auto");
+                        fi.params.emplace_back(pname, mapDeclaredTypeToKindEx(pty));
+                    }
+                }
+                else if (ch->type == "Overlay") {
+                    std::string ov = ch->value;
+                    std::string low = ov;
+                    std::transform(low.begin(), low.end(), low.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+                    if (low == "pure") {
+                        fi.pure = true;
+                    }
+                    else if (low.size() > 7 && low.rfind("nonneg_", 0) == 0) {
+                        // overlay syntax: nonneg_<paramName>
+                        std::string pname = low.substr(7);
+                        if (!pname.empty()) fi.nonnegParams.insert(pname);
+                    }
+                    else if (low == "nonnegative") {
+                        // If user added a generic nonnegative overlay without param, apply to all numeric params
+                        for (auto& pr : fi.params) fi.nonnegParams.insert(pr.first);
+                    }
+                }
+            }
+            gFunctions[fi.name] = std::move(fi);
+        }
+        for (auto* c : n->children) walk(c);
+        };
+    walk(root);
+}
+
+// ---- Side-effect classification for "pure" functions ----
+static bool isSideEffecting(Node* n) {
+    if (!n) return false;
+    static const std::unordered_set<std::string> se = {
+        "Print","Open","Write","Writeln","Read","Close","Send","Recv","Schedule","Sync","Mutate","Input","Checkpoint","VBreak"
+    };
+    return se.count(n->type) > 0;
+}
+
+// ---- Simple range/non-negativity facts ----
+enum class NonNeg { Unknown, False, True };
+
+struct Facts {
+    std::vector<std::unordered_map<std::string, NonNeg>> stack;
+    Facts() { stack.push_back({}); }
+    void push() { stack.push_back({}); }
+    void pop() { if (stack.size() > 1) stack.pop_back(); }
+    NonNeg get(const std::string& v) const {
+        for (auto it = stack.rbegin(); it != stack.rend(); ++it) {
+            auto f = it->find(v);
+            if (f != it->end()) return f->second;
+        }
+        return NonNeg::Unknown;
+    }
+    void set(const std::string& v, NonNeg nn) { stack.back()[v] = nn; }
+};
+
+static NonNeg isExprNonNeg(Node* e, const Facts& facts) {
+    if (!e) return NonNeg::Unknown;
+    if (e->type == "Num") {
+        double d = 0; if (toDouble(e->value, d)) return d >= 0 ? NonNeg::True : NonNeg::False;
+        return NonNeg::Unknown;
+    }
+    if (e->type == "Var") return facts.get(e->value);
+    if (e->type == "Ternary") {
+        NonNeg a = isExprNonNeg(e->children[1], facts);
+        NonNeg b = isExprNonNeg(e->children[2], facts);
+        if (a == NonNeg::True && b == NonNeg::True) return NonNeg::True;
+        if (a == NonNeg::False && b == NonNeg::False) return NonNeg::False;
+        return NonNeg::Unknown;
+    }
+    if (e->type == "BinOp") {
+        NonNeg L = isExprNonNeg(e->children[0], facts);
+        NonNeg R = isExprNonNeg(e->children[1], facts);
+        const std::string& op = e->value;
+        if (op == "+") {
+            if (L == NonNeg::True && R == NonNeg::True) return NonNeg::True;
+            if (L == NonNeg::False || R == NonNeg::False) return NonNeg::Unknown;
+            return NonNeg::Unknown;
+        }
+        if (op == "*") {
+            if (L == NonNeg::True && R == NonNeg::True) return NonNeg::True;
+            // negative * negative could be non-neg, but we don't prove it here
+            return NonNeg::Unknown;
+        }
+        // Other ops unknown
+        return NonNeg::Unknown;
+    }
+    return NonNeg::Unknown;
+}
+
+static int gSemanticErrors = 0;
+static void reportSemError(const std::string& msg) {
+    ++gSemanticErrors;
+    std::cerr << "[semantic error] " << msg << "\n";
+}
+
+static void learnFactsFromStmt(Node* n, Facts& facts) {
+    if (!n) return;
+    if (n->type == "Let" && !n->children.empty()) {
+        NonNeg nn = isExprNonNeg(n->children[0], facts);
+        if (nn != NonNeg::Unknown) facts.set(n->value, nn);
+    }
+    if (n->type == "Assign" && !n->children.empty()) {
+        Node* lhs = n->children[0];
+        if (lhs && lhs->type == "Var") {
+            const std::string& name = lhs->value;
+            if (n->value == "=" && n->children.size() > 1) {
+                NonNeg nn = isExprNonNeg(n->children[1], facts);
+                if (nn != NonNeg::Unknown) facts.set(name, nn);
+            }
+            else if (n->value == "+=" && n->children.size() > 1) {
+                NonNeg a = facts.get(name);
+                NonNeg b = isExprNonNeg(n->children[1], facts);
+                if (a == NonNeg::True && b == NonNeg::True) facts.set(name, NonNeg::True);
+            }
+            else if (n->value == "-=") {
+                // may break non-neg; mark unknown
+                facts.set(name, NonNeg::Unknown);
+            }
+        }
+    }
+    if (n->type == "Bounds" && n->children.size() == 3) {
+        const std::string& name = n->children[0]->value;
+        NonNeg mn = isExprNonNeg(n->children[1], facts);
+        if (mn == NonNeg::True) facts.set(name, NonNeg::True);
+    }
+}
+
+// Validate expressions for strong typing (basic checks)
+static void strongTypeCheckExpr(Node* e,
+    std::vector<std::unordered_map<std::string, TypeKindEx>>& typeScopes) {
+    if (!e) return;
+    if (e->type == "BinOp") {
+        TypeKindEx L = inferExprStrong(e->children[0], typeScopes);
+        TypeKindEx R = inferExprStrong(e->children[1], typeScopes);
+        const std::string& op = e->value;
+        auto isArith = [&](const std::string& s) { return s == "-" || s == "*" || s == "/" || s == "%"; };
+        auto isRel = [&](const std::string& s) { return s == "<" || s == ">" || s == "<=" || s == ">=" || s == "==" || s == "!="; };
+        if (op == "+") {
+            // ok for number+number or string+string; else flag
+            if (!((L == TypeKindEx::Number && R == TypeKindEx::Number) ||
+                (L == TypeKindEx::String && R == TypeKindEx::String))) {
+                reportSemError("Operator '+' requires both Number or both String operands");
+            }
+        }
+        else if (isArith(op)) {
+            if (!(L == TypeKindEx::Number && R == TypeKindEx::Number)) {
+                reportSemError("Arithmetic operator '" + op + "' requires Number operands");
+            }
+        }
+        else if (isRel(op)) {
+            if (!(L == TypeKindEx::Number && R == TypeKindEx::Number)) {
+                reportSemError("Relational operator '" + op + "' requires Number operands");
+            }
+        }
+    }
+    for (auto* c : e->children) strongTypeCheckExpr(c, typeScopes);
+}
+
+// ---- Function model + overlay constraints ----
+struct FunctionInfo {
+    std::string name;
+    std::vector<std::pair<std::string, TypeKindEx>> params; // {name, kind}
+    bool pure = false;                                       // overlay: pure
+    std::unordered_set<std::string> nonnegParams;            // overlay: nonneg_<param>
+};
+
+static std::unordered_map<std::string, FunctionInfo> gFunctions;
+
+// Extract function signature and overlay constraints (supports: "pure" and "nonneg_<paramName>")
+static void collectFunctionsAndConstraints(Node* root) {
+    gFunctions.clear();
+    if (!root) return;
+    std::function<void(Node*)> walk = [&](Node* n) {
+        if (!n) return;
+        if (n->type == "Fn") {
+            FunctionInfo fi;
+            fi.name = n->value;
+            for (auto* ch : n->children) {
+                if (ch->type == "Params") {
+                    for (auto* p : ch->children) {
+                        std::string pname = p->value;
+                        std::string pty = (!p->children.empty() ? p->children[0]->value : "auto");
+                        fi.params.emplace_back(pname, mapDeclaredTypeToKindEx(pty));
+                    }
+                }
+                else if (ch->type == "Overlay") {
+                    std::string ov = ch->value;
+                    std::string low = ov;
+                    std::transform(low.begin(), low.end(), low.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+                    if (low == "pure") {
+                        fi.pure = true;
+                    }
+                    else if (low.size() > 7 && low.rfind("nonneg_", 0) == 0) {
+                        // overlay syntax: nonneg_<paramName>
+                        std::string pname = low.substr(7);
+                        if (!pname.empty()) fi.nonnegParams.insert(pname);
+                    }
+                    else if (low == "nonnegative") {
+                        // If user added a generic nonnegative overlay without param, apply to all numeric params
+                        for (auto& pr : fi.params) fi.nonnegParams.insert(pr.first);
+                    }
+                }
+            }
+            gFunctions[fi.name] = std::move(fi);
+        }
+        for (auto* c : n->children) walk(c);
+        };
+    walk(root);
+}
+
+// ---- Side-effect classification for "pure" functions ----
+static bool isSideEffecting(Node* n) {
+    if (!n) return false;
+    static const std::unordered_set<std::string> se = {
+        "Print","Open","Write","Writeln","Read","Close","Send","Recv","Schedule","Sync","Mutate","Input","Checkpoint","VBreak"
+    };
+    return se.count(n->type) > 0;
+}
+
+// ---- Simple range/non-negativity facts ----
+enum class NonNeg { Unknown, False, True };
+
+struct Facts {
+    std::vector<std::unordered_map<std::string, NonNeg>> stack;
+    Facts() { stack.push_back({}); }
+    void push() { stack.push_back({}); }
+    void pop() { if (stack.size() > 1) stack.pop_back(); }
+    NonNeg get(const std::string& v) const {
+        for (auto it = stack.rbegin(); it != stack.rend(); ++it) {
+            auto f = it->find(v);
+            if (f != it->end()) return f->second;
+        }
+        return NonNeg::Unknown;
+    }
+    void set(const std::string& v, NonNeg nn) { stack.back()[v] = nn; }
+};
+
+static NonNeg isExprNonNeg(Node* e, const Facts& facts) {
+    if (!e) return NonNeg::Unknown;
+    if (e->type == "Num") {
+        double d = 0; if (toDouble(e->value, d)) return d >= 0 ? NonNeg::True : NonNeg::False;
+        return NonNeg::Unknown;
+    }
+    if (e->type == "Var") return facts.get(e->value);
+    if (e->type == "Ternary") {
+        NonNeg a = isExprNonNeg(e->children[1], facts);
+        NonNeg b = isExprNonNeg(e->children[2], facts);
+        if (a == NonNeg::True && b == NonNeg::True) return NonNeg::True;
+        if (a == NonNeg::False && b == NonNeg::False) return NonNeg::False;
+        return NonNeg::Unknown;
+    }
+    if (e->type == "BinOp") {
+        NonNeg L = isExprNonNeg(e->children[0], facts);
+        NonNeg R = isExprNonNeg(e->children[1], facts);
+        const std::string& op = e->value;
+        if (op == "+") {
+            if (L == NonNeg::True && R == NonNeg::True) return NonNeg::True;
+            if (L == NonNeg::False || R == NonNeg::False) return NonNeg::Unknown;
+            return NonNeg::Unknown;
+        }
+        if (op == "*") {
+            if (L == NonNeg::True && R == NonNeg::True) return NonNeg::True;
+            // negative * negative could be non-neg, but we don't prove it here
+            return NonNeg::Unknown;
+        }
+        // Other ops unknown
+        return NonNeg::Unknown;
+    }
+    return NonNeg::Unknown;
+}
+
+static int gSemanticErrors = 0;
+static void reportSemError(const std::string& msg) {
+    ++gSemanticErrors;
+    std::cerr << "[semantic error] " << msg << "\n";
+}
+
+static void learnFactsFromStmt(Node* n, Facts& facts) {
+    if (!n) return;
+    if (n->type == "Let" && !n->children.empty()) {
+        NonNeg nn = isExprNonNeg(n->children[0], facts);
+        if (nn != NonNeg::Unknown) facts.set(n->value, nn);
+    }
+    if (n->type == "Assign" && !n->children.empty()) {
+        Node* lhs = n->children[0];
+        if (lhs && lhs->type == "Var") {
+            const std::string& name = lhs->value;
+            if (n->value == "=" && n->children.size() > 1) {
+                NonNeg nn = isExprNonNeg(n->children[1], facts);
+                if (nn != NonNeg::Unknown) facts.set(name, nn);
+            }
+            else if (n->value == "+=" && n->children.size() > 1) {
+                NonNeg a = facts.get(name);
+                NonNeg b = isExprNonNeg(n->children[1], facts);
+                if (a == NonNeg::True && b == NonNeg::True) facts.set(name, NonNeg::True);
+            }
+            else if (n->value == "-=") {
+                // may break non-neg; mark unknown
+                facts.set(name, NonNeg::Unknown);
+            }
+        }
+    }
+    if (n->type == "Bounds" && n->children.size() == 3) {
+        const std::string& name = n->children[0]->value;
+        NonNeg mn = isExprNonNeg(n->children[1], facts);
+        if (mn == NonNeg::True) facts.set(name, NonNeg::True);
+    }
+}
+
+// Validate expressions for strong typing (basic checks)
+static void strongTypeCheckExpr(Node* e,
+    std::vector<std::unordered_map<std::string, TypeKindEx>>& typeScopes) {
+    if (!e) return;
+    if (e->type == "BinOp") {
+        TypeKindEx L = inferExprStrong(e->children[0], typeScopes);
+        TypeKindEx R = inferExprStrong(e->children[1], typeScopes);
+        const std::string& op = e->value;
+        auto isArith = [&](const std::string& s) { return s == "-" || s == "*" || s == "/" || s == "%"; };
+        auto isRel = [&](const std::string& s) { return s == "<" || s == ">" || s == "<=" || s == ">=" || s == "==" || s == "!="; };
+        if (op == "+") {
+            // ok for number+number or string+string; else flag
+            if (!((L == TypeKindEx::Number && R == TypeKindEx::Number) ||
+                (L == TypeKindEx::String && R == TypeKindEx::String))) {
+                reportSemError("Operator '+' requires both Number or both String operands");
+            }
+        }
+        else if (isArith(op)) {
+            if (!(L == TypeKindEx::Number && R == TypeKindEx::Number)) {
+                reportSemError("Arithmetic operator '" + op + "' requires Number operands");
+            }
+        }
+        else if (isRel(op)) {
+            if (!(L == TypeKindEx::Number && R == TypeKindEx::Number)) {
+                reportSemError("Relational operator '" + op + "' requires Number operands");
+            }
+        }
+    }
+    for (auto* c : e->children) strongTypeCheckExpr(c, typeScopes);
+}
+
+// ---- Function model + overlay constraints ----
+struct FunctionInfo {
+    std::string name;
+    std::vector<std::pair<std::string, TypeKindEx>> params; // {name, kind}
+    bool pure = false;                                       // overlay: pure
+    std::unordered_set<std::string> nonnegParams;            // overlay: nonneg_<param>
+};
+
+static std::unordered_map<std::string, FunctionInfo> gFunctions;
+
+// Extract function signature and overlay constraints (supports: "pure" and "nonneg_<paramName>")
+static void collectFunctionsAndConstraints(Node* root) {
+    gFunctions.clear();
+    if (!root) return;
+    std::function<void(Node*)> walk = [&](Node* n) {
+        if (!n) return;
+        if (n->type == "Fn") {
+            FunctionInfo fi;
+            fi.name = n->value;
+            for (auto* ch : n->children) {
+                if (ch->type == "Params") {
+                    for (auto* p : ch->children) {
+                        std::string pname = p->value;
+                        std::string pty = (!p->children.empty() ? p->children[0]->value : "auto");
+                        fi.params.emplace_back(pname, mapDeclaredTypeToKindEx(pty));
+                    }
+                }
+                else if (ch->type == "Overlay") {
+                    std::string ov = ch->value;
+                    std::string low = ov;
+                    std::transform(low.begin(), low.end(), low.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+                    if (low == "pure") {
+                        fi.pure = true;
+                    }
+                    else if (low.size() > 7 && low.rfind("nonneg_", 0) == 0) {
+                        // overlay syntax: nonneg_<paramName>
+                        std::string pname = low.substr(7);
+                        if (!pname.empty()) fi.nonnegParams.insert(pname);
+                    }
+                    else if (low == "nonnegative") {
+                        // If user added a generic nonnegative overlay without param, apply to all numeric params
+                        for (auto& pr : fi.params) fi.nonnegParams.insert(pr.first);
+                    }
+                }
+            }
+            gFunctions[fi.name] = std::move(fi);
+        }
+        for (auto* c : n->children) walk(c);
+        };
+    walk(root);
+}
+
+// ---- Side-effect classification for "pure" functions ----
+static bool isSideEffecting(Node* n) {
+    if (!n) return false;
+    static const std::unordered_set<std::string> se = {
+        "Print","Open","Write","Writeln","Read","Close","Send","Recv","Schedule","Sync","Mutate","Input","Checkpoint","VBreak"
+    };
+    return se.count(n->type) > 0;
+}
+
+// ---- Simple range/non-negativity facts ----
+enum class NonNeg { Unknown, False, True };
+
+struct Facts {
+    std::vector<std::unordered_map<std::string, NonNeg>> stack;
+    Facts() { stack.push_back({}); }
+    void push() { stack.push_back({}); }
+    void pop() { if (stack.size() > 1) stack.pop_back(); }
+    NonNeg get(const std::string& v) const {
+        for (auto it = stack.rbegin(); it != stack.rend(); ++it) {
+            auto f = it->find(v);
+            if (f != it->end()) return f->second;
+        }
+        return NonNeg::Unknown;
+    }
+    void set(const std::string& v, NonNeg nn) { stack.back()[v] = nn; }
+};
+
+static NonNeg isExprNonNeg(Node* e, const Facts& facts) {
+    if (!e) return NonNeg::Unknown;
+    if (e->type == "Num") {
+        double d = 0; if (toDouble(e->value, d)) return d >= 0 ? NonNeg::True : NonNeg::False;
+        return NonNeg::Unknown;
+    }
+    if (e->type == "Var") return facts.get(e->value);
+    if (e->type == "Ternary") {
+        NonNeg a = isExprNonNeg(e->children[1], facts);
+        NonNeg b = isExprNonNeg(e->children[2], facts);
+        if (a == NonNeg::True && b == NonNeg::True) return NonNeg::True;
+        if (a == NonNeg::False && b == NonNeg::False) return NonNeg::False;
+        return NonNeg::Unknown;
+    }
+    if (e->type == "BinOp") {
+        NonNeg L = isExprNonNeg(e->children[0], facts);
+        NonNeg R = isExprNonNeg(e->children[1], facts);
+        const std::string& op = e->value;
+        if (op == "+") {
+            if (L == NonNeg::True && R == NonNeg::True) return NonNeg::True;
+            if (L == NonNeg::False || R == NonNeg::False) return NonNeg::Unknown;
+            return NonNeg::Unknown;
+        }
+        if (op == "*") {
+            if (L == NonNeg::True && R == NonNeg::True) return NonNeg::True;
+            // negative * negative could be non-neg, but we don't prove it here
+            return NonNeg::Unknown;
+        }
+        // Other ops unknown
+        return NonNeg::Unknown;
+    }
+    return NonNeg::Unknown;
+}
+
+static int gSemanticErrors = 0;
+static void reportSemError(const std::string& msg) {
+    ++gSemanticErrors;
+    std::cerr << "[semantic error] " << msg << "\n";
+}
+
+static void learnFactsFromStmt(Node* n, Facts& facts) {
+    if (!n) return;
+    if (n->type == "Let" && !n->children.empty()) {
+        NonNeg nn = isExprNonNeg(n->children[0], facts);
+        if (nn != NonNeg::Unknown) facts.set(n->value, nn);
+    }
+    if (n->type == "Assign" && !n->children.empty()) {
+        Node* lhs = n->children[0];
+        if (lhs && lhs->type == "Var") {
+            const std::string& name = lhs->value;
+            if (n->value == "=" && n->children.size() > 1) {
+                NonNeg nn = isExprNonNeg(n->children[1], facts);
+                if (nn != NonNeg::Unknown) facts.set(name, nn);
+            }
+            else if (n->value == "+=" && n->children.size() > 1) {
+                NonNeg a = facts.get(name);
+                NonNeg b = isExprNonNeg(n->children[1], facts);
+                if (a == NonNeg::True && b == NonNeg::True) facts.set(name, NonNeg::True);
+            }
+            else if (n->value == "-=") {
+                // may break non-neg; mark unknown
+                facts.set(name, NonNeg::Unknown);
+            }
+        }
+    }
+    if (n->type == "Bounds" && n->children.size() == 3) {
+        const std::string& name = n->children[0]->value;
+        NonNeg mn = isExprNonNeg(n->children[1], facts);
+        if (mn == NonNeg::True) facts.set(name, NonNeg::True);
+    }
+}
+
+// Validate expressions for strong typing (basic checks)
+static void strongTypeCheckExpr(Node* e,
+    std::vector<std::unordered_map<std::string, TypeKindEx>>& typeScopes) {
+    if (!e) return;
+    if (e->type == "BinOp") {
+        TypeKindEx L = inferExprStrong(e->children[0], typeScopes);
+        TypeKindEx R = inferExprStrong(e->children[1], typeScopes);
+        const std::string& op = e->value;
+        auto isArith = [&](const std::string& s) { return s == "-" || s == "*" || s == "/" || s == "%"; };
+        auto isRel = [&](const std::string& s) { return s == "<" || s == ">" || s == "<=" || s == ">=" || s == "==" || s == "!="; };
+        if (op == "+") {
+            // ok for number+number or string+string; else flag
+            if (!((L == TypeKindEx::Number && R == TypeKindEx::Number) ||
+                (L == TypeKindEx::String && R == TypeKindEx::String))) {
+                reportSemError("Operator '+' requires both Number or both String operands");
+            }
+        }
+        else if (isArith(op)) {
+            if (!(L == TypeKindEx::Number && R == TypeKindEx::Number)) {
+                reportSemError("Arithmetic operator '" + op + "' requires Number operands");
+            }
+        }
+        else if (isRel(op)) {
+            if (!(L == TypeKindEx::Number && R == TypeKindEx::Number)) {
+                reportSemError("Relational operator '" + op + "' requires Number operands");
+            }
+        }
+    }
+    for (auto* c : e->children) strongTypeCheckExpr(c, typeScopes);
+}
+
+// ---- Function model + overlay constraints ----
+struct FunctionInfo {
+    std::string name;
+    std::vector<std::pair<std::string, TypeKindEx>> params; // {name, kind}
+    bool pure = false;                                       // overlay: pure
+    std::unordered_set<std::string> nonnegParams;            // overlay: nonneg_<param>
+};
+
+static std::unordered_map<std::string, FunctionInfo> gFunctions;
+
+// Extract function signature and overlay constraints (supports: "pure" and "nonneg_<paramName>")
+static void collectFunctionsAndConstraints(Node* root) {
+    gFunctions.clear();
+    if (!root) return;
+    std::function<void(Node*)> walk = [&](Node* n) {
+        if (!n) return;
+        if (n->type == "Fn") {
+            FunctionInfo fi;
+            fi.name = n->value;
+            for (auto* ch : n->children) {
+                if (ch->type == "Params") {
+                    for (auto* p : ch->children) {
+                        std::string pname = p->value;
+                        std::string pty = (!p->children.empty() ? p->children[0]->value : "auto");
+                        fi.params.emplace_back(pname, mapDeclaredTypeToKindEx(pty));
+                    }
+                }
+                else if (ch->type == "Overlay") {
+                    std::string ov = ch->value;
+                    std::string low = ov;
+                    std::transform(low.begin(), low.end(), low.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+                    if (low == "pure") {
+                        fi.pure = true;
+                    }
+                    else if (low.size() > 7 && low.rfind("nonneg_", 0) == 0) {
+                        // overlay syntax: nonneg_<paramName>
+                        std::string pname = low.substr(7);
+                        if (!pname.empty()) fi.nonnegParams.insert(pname);
+                    }
+                    else if (low == "nonnegative") {
+                        // If user added a generic nonnegative overlay without param, apply to all numeric params
+                        for (auto& pr : fi.params) fi.nonnegParams.insert(pr.first);
+                    }
+                }
+            }
+            gFunctions[fi.name] = std::move(fi);
+        }
+        for (auto* c : n->children) walk(c);
+        };
+    walk(root);
+}
+
+// ---- Side-effect classification for "pure" functions ----
+static bool isSideEffecting(Node* n) {
+    if (!n) return false;
+    static const std::unordered_set<std::string> se = {
+        "Print","Open","Write","Writeln","Read","Close","Send","Recv","Schedule","Sync","Mutate","Input","Checkpoint","VBreak"
+    };
+    return se.count(n->type) > 0;
+}
+
+// ---- Simple range/non-negativity facts ----
+enum class NonNeg { Unknown, False, True };
+
+struct Facts {
+    std::vector<std::unordered_map<std::string, NonNeg>> stack;
+    Facts() { stack.push_back({}); }
+    void push() { stack.push_back({}); }
+    void pop() { if (stack.size() > 1) stack.pop_back(); }
+    NonNeg get(const std::string& v) const {
+        for (auto it = stack.rbegin(); it != stack.rend(); ++it) {
+            auto f = it->find(v);
+            if (f != it->end()) return f->second;
+        }
+        return NonNeg::Unknown;
+    }
+    void set(const std::string& v, NonNeg nn) { stack.back()[v] = nn; }
+};
+
+static NonNeg isExprNonNeg(Node* e, const Facts& facts) {
+    if (!e) return NonNeg::Unknown;
+    if (e->type == "Num") {
+        double d = 0; if (toDouble(e->value, d)) return d >= 0 ? NonNeg::True : NonNeg::False;
+        return NonNeg::Unknown;
+    }
+    if (e->type == "Var") return facts.get(e->value);
+    if (e->type == "Ternary") {
+        NonNeg a = isExprNonNeg(e->children[1], facts);
+        NonNeg b = isExprNonNeg(e->children[2], facts);
+        if (a == NonNeg::True && b == NonNeg::True) return NonNeg::True;
+        if (a == NonNeg::False && b == NonNeg::False) return NonNeg::False;
+        return NonNeg::Unknown;
+    }
+    if (e->type == "BinOp") {
+        NonNeg L = isExprNonNeg(e->children[0], facts);
+        NonNeg R = isExprNonNeg(e->children[1], facts);
+        const std::string& op = e->value;
+        if (op == "+") {
+            if (L == NonNeg::True && R == NonNeg::True) return NonNeg::True;
+            if (L == NonNeg::False || R == NonNeg::False) return NonNeg::Unknown;
+            return NonNeg::Unknown;
+        }
+        if (op == "*") {
+            if (L == NonNeg::True && R == NonNeg::True) return NonNeg::True;
+            // negative * negative could be non-neg, but we don't prove it here
+            return NonNeg::Unknown;
+        }
+        // Other ops unknown
+        return NonNeg::Unknown;
+    }
+    return NonNeg::Unknown;
+}
+
+static int gSemanticErrors = 0;
+static void reportSemError(const std::string& msg) {
+    ++gSemanticErrors;
+    std::cerr << "[semantic error] " << msg << "\n";
+}
+
+static void learnFactsFromStmt(Node* n, Facts& facts) {
+    if (!n) return;
+    if (n->type == "Let" && !n->children.empty()) {
+        NonNeg nn = isExprNonNeg(n->children[0], facts);
+        if (nn != NonNeg::Unknown) facts.set(n->value, nn);
+    }
+    if (n->type == "Assign" && !n->children.empty()) {
+        Node* lhs = n->children[0];
+        if (lhs && lhs->type == "Var") {
+            const std::string& name = lhs->value;
+            if (n->value == "=" && n->children.size() > 1) {
+                NonNeg nn = isExprNonNeg(n->children[1], facts);
+                if (nn != NonNeg::Unknown) facts.set(name, nn);
+            }
+            else if (n->value == "+=" && n->children.size() > 1) {
+                NonNeg a = facts.get(name);
+                NonNeg b = isExprNonNeg(n->children[1], facts);
+                if (a == NonNeg::True && b == NonNeg::True) facts.set(name, NonNeg::True);
+            }
+            else if (n->value == "-=") {
+                // may break non-neg; mark unknown
+                facts.set(name, NonNeg::Unknown);
+            }
+        }
+    }
+    if (n->type == "Bounds" && n->children.size() == 3) {
+        const std::string& name = n->children[0]->value;
+        NonNeg mn = isExprNonNeg(n->children[1], facts);
+        if (mn == NonNeg::True) facts.set(name, NonNeg::True);
+    }
+}
+
+// Validate expressions for strong typing (basic checks)
+static void strongTypeCheckExpr(Node* e,
+    std::vector<std::unordered_map<std::string, TypeKindEx>>& typeScopes) {
+    if (!e) return;
+    if (e->type == "BinOp") {
+        TypeKindEx L = inferExprStrong(e->children[0], typeScopes);
+        TypeKindEx R = inferExprStrong(e->children[1], typeScopes);
+        const std::string& op = e->value;
+        auto isArith = [&](const std::string& s) { return s == "-" || s == "*" || s == "/" || s == "%"; };
+        auto isRel = [&](const std::string& s) { return s == "<" || s == ">" || s == "<=" || s == ">=" || s == "==" || s == "!="; };
+        if (op == "+") {
+            // ok for number+number or string+string; else flag
+            if (!((L == TypeKindEx::Number && R == TypeKindEx::Number) ||
+                (L == TypeKindEx::String && R == TypeKindEx::String))) {
+                reportSemError("Operator '+' requires both Number or both String operands");
+            }
+        }
+        else if (isArith(op)) {
+            if (!(L == TypeKindEx::Number && R == TypeKindEx::Number)) {
+                reportSemError("Arithmetic operator '" + op + "' requires Number operands");
+            }
+        }
+        else if (isRel(op)) {
+            if (!(L == TypeKindEx::Number && R == TypeKindEx::Number)) {
+                reportSemError("Relational operator '" + op + "' requires Number operands");
+            }
+        }
+    }
+    for (auto* c : e->children) strongTypeCheckExpr(c, typeScopes);
+}
+
+// ---- Function model + overlay constraints ----
+struct FunctionInfo {
+    std::string name;
+    std::vector<std::pair<std::string, TypeKindEx>> params; // {name, kind}
+    bool pure = false;                                       // overlay: pure
+    std::unordered_set<std::string> nonnegParams;            // overlay: nonneg_<param>
+};
+
+static std::unordered_map<std::string, FunctionInfo> gFunctions;
+
+// Extract function signature and overlay constraints (supports: "pure" and "nonneg_<paramName>")
+static void collectFunctionsAndConstraints(Node* root) {
+    gFunctions.clear();
+    if (!root) return;
+    std::function<void(Node*)> walk = [&](Node* n) {
+        if (!n) return;
+        if (n->type == "Fn") {
+            FunctionInfo fi;
+            fi.name = n->value;
+            for (auto* ch : n->children) {
+                if (ch->type == "Params") {
+                    for (auto* p : ch->children) {
+                        std::string pname = p->value;
+                        std::string pty = (!p->children.empty() ? p->children[0]->value : "auto");
+                        fi.params.emplace_back(pname, mapDeclaredTypeToKindEx(pty));
+                    }
+                }
+                else if (ch->type == "Overlay") {
+                    std::string ov = ch->value;
+                    std::string low = ov;
+                    std::transform(low.begin(), low.end(), low.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+                    if (low == "pure") {
+                        fi.pure = true;
+                    }
+                    else if (low.size() > 7 && low.rfind("nonneg_", 0) == 0) {
+                        // overlay syntax: nonneg_<paramName>
+                        std::string pname = low.substr(7);
+                        if (!pname.empty()) fi.nonnegParams.insert(pname);
+                    }
+                    else if (low == "nonnegative") {
+                        // If user added a generic nonnegative overlay without param, apply to all numeric params
+                        for (auto& pr : fi.params) fi.nonnegParams.insert(pr.first);
+                    }
+                }
+            }
+            gFunctions[fi.name] = std::move(fi);
+        }
+        for (auto* c : n->children) walk(c);
+        };
+    walk(root);
+}
+
+// ---- Side-effect classification for "pure" functions ----
+static bool isSideEffecting(Node* n) {
+    if (!n) return false;
+    static const std::unordered_set<std::string> se = {
+        "Print","Open","Write","Writeln","Read","Close","Send","Recv","Schedule","Sync","Mutate","Input","Checkpoint","VBreak"
+    };
+    return se.count(n->type) > 0;
+}
+
+// ---- Simple range/non-negativity facts ----
+enum class NonNeg { Unknown, False, True };
+
+struct Facts {
+    std::vector<std::unordered_map<std::string, NonNeg>> stack;
+    Facts() { stack.push_back({}); }
+    void push() { stack.push_back({}); }
+    void pop() { if (stack.size() > 1) stack.pop_back(); }
+    NonNeg get(const std::string& v) const {
+        for (auto it = stack.rbegin(); it != stack.rend(); ++it) {
+            auto f = it->find(v);
+            if (f != it->end()) return f->second;
+        }
+        return NonNeg::Unknown;
+    }
+    void set(const std::string& v, NonNeg nn) { stack.back()[v] = nn; }
+};
+
+static NonNeg isExprNonNeg(Node* e, const Facts& facts) {
+    if (!e) return NonNeg::Unknown;
+    if (e->type == "Num") {
+        double d = 0; if (toDouble(e->value, d)) return d >= 0 ? NonNeg::True : NonNeg::False;
+        return NonNeg::Unknown;
+    }
+    if (e->type == "Var") return facts.get(e->value);
+    if (e->type == "Ternary") {
+        NonNeg a = isExprNonNeg(e->children[1], facts);
+        NonNeg b = isExprNonNeg(e->children[2], facts);
+        if (a == NonNeg::True && b == NonNeg::True) return NonNeg::True;
+        if (a == NonNeg::False && b == NonNeg::False) return NonNeg::False;
+        return NonNeg::Unknown;
+    }
+    if (e->type == "BinOp") {
+        NonNeg L = isExprNonNeg(e->children[0], facts);
+        NonNeg R = isExprNonNeg(e->children[1], facts);
+        const std::string& op = e->value;
+        if (op == "+") {
+            if (L == NonNeg::True && R == NonNeg::True) return NonNeg::True;
+            if (L == NonNeg::False || R == NonNeg::False) return NonNeg::Unknown;
+            return NonNeg::Unknown;
+        }
+        if (op == "*") {
+            if (L == NonNeg::True && R == NonNeg::True) return NonNeg::True;
+            // negative * negative could be non-neg, but we don't prove it here
+            return NonNeg::Unknown;
+        }
+        // Other ops unknown
+        return NonNeg::Unknown;
+    }
+    return NonNeg::Unknown;
+}
+
+static int gSemanticErrors = 0;
+static void reportSemError(const std::string& msg) {
+    ++gSemanticErrors;
+    std::cerr << "[semantic error] " << msg << "\n";
+}
+
+static void learnFactsFromStmt(Node* n, Facts& facts) {
+    if (!n) return;
+    if (n->type == "Let" && !n->children.empty()) {
+        NonNeg nn = isExprNonNeg(n->children[0], facts);
+        if (nn != NonNeg::Unknown) facts.set(n->value, nn);
+    }
+    if (n->type == "Assign" && !n->children.empty()) {
+        Node* lhs = n->children[0];
+        if (lhs && lhs->type == "Var") {
+            const std::string& name = lhs->value;
+            if (n->value == "=" && n->children.size() > 1) {
+                NonNeg nn = isExprNonNeg(n->children[1], facts);
+                if (nn != NonNeg::Unknown) facts.set(name, nn);
+            }
+            else if (n->value == "+=" && n->children.size() > 1) {
+                NonNeg a = facts.get(name);
+                NonNeg b = isExprNonNeg(n->children[1], facts);
+                if (a == NonNeg::True && b == NonNeg::True) facts.set(name, NonNeg::True);
+            }
+            else if (n->value == "-=") {
+                // may break non-neg; mark unknown
+                facts.set(name, NonNeg::Unknown);
+            }
+        }
+    }
+    if (n->type == "Bounds" && n->children.size() == 3) {
+        const std::string& name = n->children[0]->value;
+        NonNeg mn = isExprNonNeg(n->children[1], facts);
+        if (mn == NonNeg::True) facts.set(name, NonNeg::True);
+    }
+}
+
+// Validate expressions for strong typing (basic checks)
+static void strongTypeCheckExpr(Node* e,
+    std::vector<std::unordered_map<std::string, TypeKindEx>>& typeScopes) {
+    if (!e) return;
+    if (e->type == "BinOp") {
+        TypeKindEx L = inferExprStrong(e->children[0], typeScopes);
+        TypeKindEx R = inferExprStrong(e->children[1], typeScopes);
+        const std::string& op = e->value;
+        auto isArith = [&](const std::string& s) { return s == "-" || s == "*" || s == "/" || s == "%"; };
+        auto isRel = [&](const std::string& s) { return s == "<" || s == ">" || s == "<=" || s == ">=" || s == "==" || s == "!="; };
+        if (op == "+") {
+            // ok for number+number or string+string; else flag
+            if (!((L == TypeKindEx::Number && R == TypeKindEx::Number) ||
+                (L == TypeKindEx::String && R == TypeKindEx::String))) {
+                reportSemError("Operator '+' requires both Number or both String operands");
+            }
+        }
+        else if (isArith(op)) {
+            if (!(L == TypeKindEx::Number && R == TypeKindEx::Number)) {
+                reportSemError("Arithmetic operator '" + op + "' requires Number operands");
+            }
+        }
+        else if (isRel(op)) {
+            if (!(L == TypeKindEx::Number && R == TypeKindEx::Number)) {
+                reportSemError("Relational operator '" + op + "' requires Number operands");
+            }
+        }
+    }
+    for (auto* c : e->children) strongTypeCheckExpr(c, typeScopes);
+}
+
+// ---- Function model + overlay constraints ----
+struct FunctionInfo {
+    std::string name;
+    std::vector<std::pair<std::string, TypeKindEx>> params; // {name, kind}
+    bool pure = false;                                       // overlay: pure
+    std::unordered_set<std::string> nonnegParams;            // overlay: nonneg_<param>
+};
+
+static std::unordered_map<std::string, FunctionInfo> gFunctions;
+
+// Extract function signature and overlay constraints (supports: "pure" and "nonneg_<paramName>")
+static void collectFunctionsAndConstraints(Node* root) {
+    gFunctions.clear();
+    if (!root) return;
+    std::function<void(Node*)> walk = [&](Node* n) {
+        if (!n) return;
+        if (n->type == "Fn") {
+            FunctionInfo fi;
+            fi.name = n->value;
+            for (auto* ch : n->children) {
+                if (ch->type == "Params") {
+                    for (auto* p : ch->children) {
+                        std::string pname = p->value;
+                        std::string pty = (!p->children.empty() ? p->children[0]->value : "auto");
+                        fi.params.emplace_back(pname, mapDeclaredTypeToKindEx(pty));
+                    }
+                }
+                else if (ch->type == "Overlay") {
+                    std::string ov = ch->value;
+                    std::string low = ov;
+                    std::transform(low.begin(), low.end(), low.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+                    if (low == "pure") {
+                        fi.pure = true;
+                    }
+                    else if (low.size() > 7 && low.rfind("nonneg_", 0) == 0) {
+                        // overlay syntax: nonneg_<paramName>
+                        std::string pname = low.substr(7);
+                        if (!pname.empty()) fi.nonnegParams.insert(pname);
+                    }
+                    else if (low == "nonnegative") {
+                        // If user added a generic nonnegative overlay without param, apply to all numeric params
+                        for (auto& pr : fi.params) fi.nonnegParams.insert(pr.first);
+                    }
+                }
+            }
+            gFunctions[fi.name] = std::move(fi);
+        }
+        for (auto* c : n->children) walk(c);
+        };
+    walk(root);
+}
+
+// ---- Side-effect classification for "pure" functions ----
+static bool isSideEffecting(Node* n) {
+    if (!n) return false;
+    static const std::unordered_set<std::string> se = {
+        "Print","Open","Write","Writeln","Read","Close","Send","Recv","Schedule","Sync","Mutate","Input","Checkpoint","VBreak"
+    };
+    return se.count(n->type) > 0;
+}
+
+// ---- Simple range/non-negativity facts ----
+enum class NonNeg { Unknown, False, True };
+
+struct Facts {
+    std::vector<std::unordered_map<std::string, NonNeg>> stack;
+    Facts() { stack.push_back({}); }
+    void push() { stack.push_back({}); }
+    void pop() { if (stack.size() > 1) stack.pop_back(); }
+    NonNeg get(const std::string& v) const {
+        for (auto it = stack.rbegin(); it != stack.rend(); ++it) {
+            auto f = it->find(v);
+            if (f != it->end()) return f->second;
+        }
+        return NonNeg::Unknown;
+    }
+    void set(const std::string& v, NonNeg nn) { stack.back()[v] = nn; }
+};
+
+static NonNeg isExprNonNeg(Node* e, const Facts& facts) {
+    if (!e) return NonNeg::Unknown;
+    if (e->type == "Num") {
+        double d = 0; if (toDouble(e->value, d)) return d >= 0 ? NonNeg::True : NonNeg::False;
+        return NonNeg::Unknown;
+    }
+    if (e->type == "Var") return facts.get(e->value);
+    if (e->type == "Ternary") {
+        NonNeg a = isExprNonNeg(e->children[1], facts);
+        NonNeg b = isExprNonNeg(e->children[2], facts);
+        if (a == NonNeg::True && b == NonNeg::True) return NonNeg::True;
+        if (a == NonNeg::False && b == NonNeg::False) return NonNeg::False;
+        return NonNeg::Unknown;
+    }
+    if (e->type == "BinOp") {
+        NonNeg L = isExprNonNeg(e->children[0], facts);
+        NonNeg R = isExprNonNeg(e->children[1], facts);
+        const std::string& op = e->value;
+        if (op == "+") {
+            if (L == NonNeg::True && R == NonNeg::True) return NonNeg::True;
+            if (L == NonNeg::False || R == NonNeg::False) return NonNeg::Unknown;
+            return NonNeg::Unknown;
+        }
+        if (op == "*") {
+            if (L == NonNeg::True && R == NonNeg::True) return NonNeg::True;
+            // negative * negative could be non-neg, but we don't prove it here
+            return NonNeg::Unknown;
+        }
+        // Other ops unknown
+        return NonNeg::Unknown;
+    }
+    return NonNeg::Unknown;
+}
+
+static int gSemanticErrors = 0;
+static void reportSemError(const std::string& msg) {
+    ++gSemanticErrors;
+    std::cerr << "[semantic error] " << msg << "\n";
+}
+
+static void learnFactsFromStmt(Node* n, Facts& facts) {
+    if (!n) return;
+    if (n->type == "Let" && !n->children.empty()) {
+        NonNeg nn = isExprNonNeg(n->children[0], facts);
+        if (nn != NonNeg::Unknown) facts.set(n->value, nn);
+    }
+    if (n->type == "Assign" && !n->children.empty()) {
+        Node* lhs = n->children[0];
+        if (lhs && lhs->type == "Var") {
+            const std::string& name = lhs->value;
+            if (n->value == "=" && n->children.size() > 1) {
+                NonNeg nn = isExprNonNeg(n->children[1], facts);
+                if (nn != NonNeg::Unknown) facts.set(name, nn);
+            }
+            else if (n->value == "+=" && n->children.size() > 1) {
+                NonNeg a = facts.get(name);
+                NonNeg b = isExprNonNeg(n->children[1], facts);
+                if (a == NonNeg::True && b == NonNeg::True) facts.set(name, NonNeg::True);
+            }
+            else if (n->value == "-=") {
+                // may break non-neg; mark unknown
+                facts.set(name, NonNeg::Unknown);
+            }
+        }
+    }
+    if (n->type == "Bounds" && n->children.size() == 3) {
+        const std::string& name = n->children[0]->value;
+        NonNeg mn = isExprNonNeg(n->children[1], facts);
+        if (mn == NonNeg::True) facts.set(name, NonNeg::True);
+    }
+}
+
+// Validate expressions for strong typing (basic checks)
+static void strongTypeCheckExpr(Node* e,
+    std::vector<std::unordered_map<std::string, TypeKindEx>>& typeScopes) {
+    if (!e) return;
+    if (e->type == "BinOp") {
+        TypeKindEx L = inferExprStrong(e->children[0], typeScopes);
+        TypeKindEx R = inferExprStrong(e->children[1], typeScopes);
+        const std::string& op = e->value;
+        auto isArith = [&](const std::string& s) { return s == "-" || s == "*" || s == "/" || s == "%"; };
+        auto isRel = [&](const std::string& s) { return s == "<" || s == ">" || s == "<=" || s == ">=" || s == "==" || s == "!="; };
+        if (op == "+") {
+            // ok for number+number or string+string; else flag
+            if (!((L == TypeKindEx::Number && R == TypeKindEx::Number) ||
+                (L == TypeKindEx::String && R == TypeKindEx::String))) {
+                reportSemError("Operator '+' requires both Number or both String operands");
+            }
+        }
+        else if (isArith(op)) {
+            if (!(L == TypeKindEx::Number && R == TypeKindEx::Number)) {
+                reportSemError("Arithmetic operator '" + op + "' requires Number operands");
+            }
+        }
+        else if (isRel(op)) {
+            if (!(L == TypeKindEx::Number && R == TypeKindEx::Number)) {
+                reportSemError("Relational operator '" + op + "' requires Number operands");
+            }
+        }
+    }
+    for (auto* c : e->children) strongTypeCheckExpr(c, typeScopes);
+}
+
+// ---- Function model + overlay constraints ----
+struct FunctionInfo {
+    std::string name;
+    std::vector<std::pair<std::string, TypeKindEx>> params; // {name, kind}
+    bool pure = false;                                       // overlay: pure
+    std::unordered_set<std::string> nonnegParams;            // overlay: nonneg_<param>
+};
+
+static std::unordered_map<std::string, FunctionInfo> gFunctions;
+
+// Extract function signature and overlay constraints (supports: "pure" and "nonneg_<paramName>")
+static void collectFunctionsAndConstraints(Node* root) {
+    gFunctions.clear();
+    if (!root) return;
+    std::function<void(Node*)> walk = [&](Node* n) {
+        if (!n) return;
+        if (n->type == "Fn") {
+            FunctionInfo fi;
+            fi.name = n->value;
+            for (auto* ch : n->children) {
+                if (ch->type == "Params") {
+                    for (auto* p : ch->children) {
+                        std::string pname = p->value;
+                        std::string pty = (!p->children.empty() ? p->children[0]->value : "auto");
+                        fi.params.emplace_back(pname, mapDeclaredTypeToKindEx(pty));
+                    }
+                }
+                else if (ch->type == "Overlay") {
+                    std::string ov = ch->value;
+                    std::string low = ov;
+                    std::transform(low.begin(), low.end(), low.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+                    if (low == "pure") {
+                        fi.pure = true;
+                    }
+                    else if (low.size() > 7 && low.rfind("nonneg_", 0) == 0) {
+                        // overlay syntax: nonneg_<paramName>
+                        std::string pname = low.substr(7);
+                        if (!pname.empty()) fi.nonnegParams.insert(pname);
+                    }
+                    else if (low == "nonnegative") {
+                        // If user added a generic nonnegative overlay without param, apply to all numeric params
+                        for (auto& pr : fi.params) fi.nonnegParams.insert(pr.first);
+                    }
+                }
+            }
+            gFunctions[fi.name] = std::move(fi);
+        }
+        for (auto* c : n->children) walk(c);
+        };
+    walk(root);
+}
+
+// ---- Side-effect classification for "pure" functions ----
+static bool isSideEffecting(Node* n) {
+    if (!n) return false;
+    static const std::unordered_set<std::string> se = {
+        "Print","Open","Write","Writeln","Read","Close","Send","Recv","Schedule","Sync","Mutate","Input","Checkpoint","VBreak"
+    };
+    return se.count(n->type) > 0;
+}
+
+// ---- Simple range/non-negativity facts ----
+enum class NonNeg { Unknown, False, True };
+
+struct Facts {
+    std::vector<std::unordered_map<std::string, NonNeg>> stack;
+    Facts() { stack.push_back({}); }
+    void push() { stack.push_back({}); }
+    void pop() { if (stack.size() > 1) stack.pop_back(); }
+    NonNeg get(const std::string& v) const {
+        for (auto it = stack.rbegin(); it != stack.rend(); ++it) {
+            auto f = it->find(v);
+            if (f != it->end()) return f->second;
+        }
+        return NonNeg::Unknown;
+    }
+    void set(const std::string& v, NonNeg nn) { stack.back()[v] = nn; }
+};
+
+static NonNeg isExprNonNeg(Node* e, const Facts& facts) {
+    if (!e) return NonNeg::Unknown;
+    if (e->type == "Num") {
+        double d = 0; if (toDouble(e->value, d)) return d >= 0 ? NonNeg::True : NonNeg::False;
+        return NonNeg::Unknown;
+    }
+    if (e->type == "Var") return facts.get(e->value);
+    if (e->type == "Ternary") {
+        NonNeg a = isExprNonNeg(e->children[1], facts);
+        NonNeg b = isExprNonNeg(e->children[2], facts);
+        if (a == NonNeg::True && b == NonNeg::True) return NonNeg::True;
+        if (a == NonNeg::False && b == NonNeg::False) return NonNeg::False;
+        return NonNeg::Unknown;
+    }
+    if (e->type == "BinOp") {
+        NonNeg L = isExprNonNeg(e->children[0], facts);
+        NonNeg R = isExprNonNeg(e->children[1], facts);
+        const std::string& op = e->value;
+        if (op == "+") {
+            if (L == NonNeg::True && R == NonNeg::True) return NonNeg::True;
+            if (L == NonNeg::False || R == NonNeg::False) return NonNeg::Unknown;
+            return NonNeg::Unknown;
+        }
+        if (op == "*") {
+            if (L == NonNeg::True && R == NonNeg::True) return NonNeg::True;
+            // negative * negative could be non-neg, but we don't prove it here
+            return NonNeg::Unknown;
+        }
+        // Other ops unknown
+        return NonNeg::Unknown;
+    }
+    return NonNeg::Unknown;
+}
+
+static int gSemanticErrors = 0;
+static void reportSemError(const std::string& msg) {
+    ++gSemanticErrors;
+    std::cerr << "[semantic error] " << msg << "\n";
+}
+
+static void learnFactsFromStmt(Node* n, Facts& facts) {
+    if (!n) return;
+    if (n->type == "Let" && !n->children.empty()) {
+        NonNeg nn = isExprNonNeg(n->children[0], facts);
+        if (nn != NonNeg::Unknown) facts.set(n->value, nn);
+    }
+    if (n->type == "Assign" && !n->children.empty()) {
+        Node* lhs = n->children[0];
+        if (lhs && lhs->type == "Var") {
+            const std::string& name = lhs->value;
+            if (n->value == "=" && n->children.size() > 1) {
+                NonNeg nn = isExprNonNeg(n->children[1], facts);
+                if (nn != NonNeg::Unknown) facts.set(name, nn);
+            }
+            else if (n->value == "+=" && n->children.size() > 1) {
+                NonNeg a = facts.get(name);
+                NonNeg b = isExprNonNeg(n->children[1], facts);
+                if (a == NonNeg::True && b == NonNeg::True) facts.set(name, NonNeg::True);
+            }
+            else if (n->value == "-=") {
+                // may break non-neg; mark unknown
+                facts.set(name, NonNeg::Unknown);
+            }
+        }
+    }
+    if (n->type == "Bounds" && n->children.size() == 3) {
+        const std::string& name = n->children[0]->value;
+        NonNeg mn = isExprNonNeg(n->children[1], facts);
+        if (mn == NonNeg::True) facts.set(name, NonNeg::True);
+    }
+}
+
+// Validate expressions for strong typing (basic checks)
+static void strongTypeCheckExpr(Node* e,
+    std::vector<std::unordered_map<std::string, TypeKindEx>>& typeScopes) {
+    if (!e) return;
+    if (e->type == "BinOp") {
+        TypeKindEx L = inferExprStrong(e->children[0], typeScopes);
+        TypeKindEx R = inferExprStrong(e->children[1], typeScopes);
+        const std::string& op = e->value;
+        auto isArith = [&](const std::string& s) { return s == "-" || s == "*" || s == "/" || s == "%"; };
+        auto isRel = [&](const std::string& s) { return s == "<" || s == ">" || s == "<=" || s == ">=" || s == "==" || s == "!="; };
+        if (op == "+") {
+            // ok for number+number or string+string; else flag
+            if (!((L == TypeKindEx::Number && R == TypeKindEx::Number) ||
+                (L == TypeKindEx::String && R == TypeKindEx::String))) {
+                reportSemError("Operator '+' requires both Number or both String operands");
+            }
+        }
+        else if (isArith(op)) {
+            if (!(L == TypeKindEx::Number && R == TypeKindEx::Number)) {
+                reportSemError("Arithmetic operator '" + op + "' requires Number operands");
+            }
+        }
+        else if (isRel(op)) {
+            if (!(L == TypeKindEx::Number && R == TypeKindEx::Number)) {
+                reportSemError("Relational operator '" + op + "' requires Number operands");
+            }
+        }
+    }
+    for (auto* c : e->children) strongTypeCheckExpr(c, typeScopes);
+}
+
+// ---- Function model + overlay constraints ----
+struct FunctionInfo {
+    std::string name;
+    std::vector<std::pair<std::string, TypeKindEx>> params; // {name, kind}
+    bool pure = false;                                       // overlay: pure
+    std::unordered_set<std::string> nonnegParams;            // overlay: nonneg_<param>
+};
+
+static std::unordered_map<std::string, FunctionInfo> gFunctions;
+
+// Extract function signature and overlay constraints (supports: "pure" and "nonneg_<paramName>")
+static void collectFunctionsAndConstraints(Node* root) {
+    gFunctions.clear();
+    if (!root) return;
+    std::function<void(Node*)> walk = [&](Node* n) {
+        if (!n) return;
+        if (n->type == "Fn") {
+            FunctionInfo fi;
+            fi.name = n->value;
+            for (auto* ch : n->children) {
+                if (ch->type == "Params") {
+                    for (auto* p : ch->children) {
+                        std::string pname = p->value;
+                        std::string pty = (!p->children.empty() ? p->children[0]->value : "auto");
+                        fi.params.emplace_back(pname, mapDeclaredTypeToKindEx(pty));
+                    }
+                }
+                else if (ch->type == "Overlay") {
+                    std::string ov = ch->value;
+                    std::string low = ov;
+                    std::transform(low.begin(), low.end(), low.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+                    if (low == "pure") {
+                        fi.pure = true;
+                    }
+                    else if (low.size() > 7 && low.rfind("nonneg_", 0) == 0) {
+                        // overlay syntax: nonneg_<paramName>
+                        std::string pname = low.substr(7);
+                        if (!pname.empty()) fi.nonnegParams.insert(pname);
+                    }
+                    else if (low == "nonnegative") {
+                        // If user added a generic nonnegative overlay without param, apply to all numeric params
+                        for (auto& pr : fi.params) fi.nonnegParams.insert(pr.first);
+                    }
+                }
+            }
+            gFunctions[fi.name] = std::move(fi);
+        }
+        for (auto* c : n->children) walk(c);
+        };
+    walk(root);
+}
+
+// ---- Side-effect classification for "pure" functions ----
+static bool isSideEffecting(Node* n) {
+    if (!n) return false;
+    static const std::unordered_set<std::string> se = {
+        "Print","Open","Write","Writeln","Read","Close","Send","Recv","Schedule","Sync","Mutate","Input","Checkpoint","VBreak"
+    };
+    return se.count(n->type) > 0;
+}
+
+// ---- Simple range/non-negativity facts ----
+enum class NonNeg { Unknown, False, True };
+
+struct Facts {
+    std::vector<std::unordered_map<std::string, NonNeg>> stack;
+    Facts() { stack.push_back({}); }
+    void push() { stack.push_back({}); }
+    void pop() { if (stack.size() > 1) stack.pop_back(); }
+    NonNeg get(const std::string& v) const {
+        for (auto it = stack.rbegin(); it != stack.rend(); ++it) {
+            auto f = it->find(v);
+            if (f != it->end()) return f->second;
+        }
+        return NonNeg::Unknown;
+    }
+    void set(const std::string& v, NonNeg nn) { stack.back()[v] = nn; }
+};
+
+static NonNeg isExprNonNeg(Node* e, const Facts& facts) {
+    if (!e) return NonNeg::Unknown;
+    if (e->type == "Num") {
+        double d = 0; if (toDouble(e->value, d)) return d >= 0 ? NonNeg::True : NonNeg::False;
+        return NonNeg::Unknown;
+    }
+    if (e->type == "Var") return facts.get(e->value);
+    if (e->type == "Ternary") {
+        NonNeg a = isExprNonNeg(e->children[1], facts);
+        NonNeg b = isExprNonNeg(e->children[2], facts);
+        if (a == NonNeg::True && b == NonNeg::True) return NonNeg::True;
+        if (a == NonNeg::False && b == NonNeg::False) return NonNeg::False;
+        return NonNeg::Unknown;
+    }
+    if (e->type == "BinOp") {
+        NonNeg L = isExprNonNeg(e->children[0], facts);
+        NonNeg R = isExprNonNeg(e->children[1], facts);
+        const std::string& op = e->value;
+        if (op == "+") {
+            if (L == NonNeg::True && R == NonNeg::True) return NonNeg::True;
+            if (L == NonNeg::False || R == NonNeg::False) return NonNeg::Unknown;
+            return NonNeg::Unknown;
+        }
+        if (op == "*") {
+            if (L == NonNeg::True && R == NonNeg::True) return NonNeg::True;
+            // negative * negative could be non-neg, but we don't prove it here
+            return NonNeg::Unknown;
+        }
+        // Other ops unknown
+        return NonNeg::Unknown;
+    }
+    return NonNeg::Unknown;
+}
+
+static int gSemanticErrors = 0;
+static void reportSemError(const std::string& msg) {
+    ++gSemanticErrors;
+    std::cerr << "[semantic error] " << msg << "\n";
+}
+
+static void learnFactsFromStmt(Node* n, Facts& facts) {
+    if (!n) return;
+    if (n->type == "Let" && !n->children.empty()) {
+        NonNeg nn = isExprNonNeg(n->children[0], facts);
+        if (nn != NonNeg::Unknown) facts.set(n->value, nn);
+    }
+    if (n->type == "Assign" && !n->children.empty()) {
+        Node* lhs = n->children[0];
+        if (lhs && lhs->type == "Var") {
+            const std::string& name = lhs->value;
+            if (n->value == "=" && n->children.size() > 1) {
+                NonNeg nn = isExprNonNeg(n->children[1], facts);
+                if (nn != NonNeg::Unknown) facts.set(name, nn);
+            }
+            else if (n->value == "+=" && n->children.size() > 1) {
+                NonNeg a = facts.get(name);
+                NonNeg b = isExprNonNeg(n->children[1], facts);
+                if (a == NonNeg::True && b == NonNeg::True) facts.set(name, NonNeg::True);
+            }
+            else if (n->value == "-=") {
+                // may break non-neg; mark unknown
+                facts.set(name, NonNeg::Unknown);
+            }
+        }
+    }
+    if (n->type == "Bounds" && n->children.size() == 3) {
+        const std::string& name = n->children[0]->value;
+        NonNeg mn = isExprNonNeg(n->children[1], facts);
+        if (mn == NonNeg::True) facts.set(name, NonNeg::True);
+    }
+}
+
+// Validate expressions for strong typing (basic checks)
+static void strongTypeCheckExpr(Node* e,
+    std::vector<std::unordered_map<std::string, TypeKindEx>>& typeScopes) {
+    if (!e) return;
+    if (e->type == "BinOp") {
+        TypeKindEx L = inferExprStrong(e->children[0], typeScopes);
+        TypeKindEx R = inferExprStrong(e->children[1], typeScopes);
+        const std::string& op = e->value;
+        auto isArith = [&](const std::string& s) { return s == "-" || s == "*" || s == "/" || s == "%"; };
+        auto isRel = [&](const std::string& s) { return s == "<" || s == ">" || s == "<=" || s == ">=" || s == "==" || s == "!="; };
+        if (op == "+") {
+            // ok for number+number or string+string; else flag
+            if (!((L == TypeKindEx::Number && R == TypeKindEx::Number) ||
+                (L == TypeKindEx::String && R == TypeKindEx::String))) {
+                reportSemError("Operator '+' requires both Number or both String operands");
+            }
+        }
+        else if (isArith(op)) {
+            if (!(L == TypeKindEx::Number && R == TypeKindEx::Number)) {
+                reportSemError("Arithmetic operator '" + op + "' requires Number operands");
+            }
+        }
+        else if (isRel(op)) {
+            if (!(L == TypeKindEx::Number && R == TypeKindEx::Number)) {
+                reportSemError("Relational operator '" + op + "' requires Number operands");
+            }
+        }
+    }
+    for (auto* c : e->children) strongTypeCheckExpr(c, typeScopes);
+}
+
+// ---- Function model + overlay constraints ----
+struct FunctionInfo {
+    std::string name;
+    std::vector<std::pair<std::string, TypeKindEx>> params; // {name, kind}
+    bool pure = false;                                       // overlay: pure
+    std::unordered_set<std::string> nonnegParams;            // overlay: nonneg_<param>
+};
+
+static std::unordered_map<std::string, FunctionInfo> gFunctions;
+
+// Extract function signature and overlay constraints (supports: "pure" and "nonneg_<paramName>")
+static void collectFunctionsAndConstraints(Node* root) {
+    gFunctions.clear();
+    if (!root) return;
+    std::function<void(Node*)> walk = [&](Node* n) {
+        if (!n) return;
+        if (n->type == "Fn") {
+            FunctionInfo fi;
+            fi.name = n->value;
+            for (auto* ch : n->children) {
+                if (ch->type == "Params") {
+                    for (auto* p : ch->children) {
+                        std::string pname = p->value;
+                        std::string pty = (!p->children.empty() ? p->children[0]->value : "auto");
+                        fi.params.emplace_back(pname, mapDeclaredTypeToKindEx(pty));
+                    }
+                }
+                else if (ch->type == "Overlay") {
+                    std::string ov = ch->value;
+                    std::string low = ov;
+                    std::transform(low.begin(), low.end(), low.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+                    if (low == "pure") {
+                        fi.pure = true;
+                    }
+                    else if (low.size() > 7 && low.rfind("nonneg_", 0) == 0) {
+                        // overlay syntax: nonneg_<paramName>
+                        std::string pname = low.substr(7);
+                        if (!pname.empty()) fi.nonnegParams.insert(pname);
+                    }
+                    else if (low == "nonnegative") {
+                        // If user added a generic nonnegative overlay without param, apply to all numeric params
+                        for (auto& pr : fi.params) fi.nonnegParams.insert(pr.first);
+                    }
+                }
+            }
+            gFunctions[fi.name] = std::move(fi);
+        }
+        for (auto* c : n->children) walk(c);
+        };
+    walk(root);
+}
+
+// ---- Side-effect classification for "pure" functions ----
+static bool isSideEffecting(Node* n) {
+    if (!n) return false;
+    static const std::unordered_set<std::string> se = {
+        "Print","Open","Write","Writeln","Read","Close","Send","Recv","Schedule","Sync","Mutate","Input","Checkpoint","VBreak"
+    };
+    return se.count(n->type) > 0;
+}
+
+// ---- Simple range/non-negativity facts ----
+enum class NonNeg { Unknown, False, True };
+
+struct Facts {
+    std::vector<std::unordered_map<std::string, NonNeg>> stack;
+    Facts() { stack.push_back({}); }
+    void push() { stack.push_back({}); }
+    void pop() { if (stack.size() > 1) stack.pop_back(); }
+    NonNeg get(const std::string& v) const {
+        for (auto it = stack.rbegin(); it != stack.rend(); ++it) {
+            auto f = it->find(v);
+            if (f != it->end()) return f->second;
+        }
+        return NonNeg::Unknown;
+    }
+    void set(const std::string& v, NonNeg nn) { stack.back()[v] = nn; }
+};
+
+static NonNeg isExprNonNeg(Node* e, const Facts& facts) {
+    if (!e) return NonNeg::Unknown;
+    if (e->type == "Num") {
+        double d = 0; if (toDouble(e->value, d)) return d >= 0 ? NonNeg::True : NonNeg::False;
+        return NonNeg::Unknown;
+    }
+    if (e->type == "Var") return facts.get(e->value);
+    if (e->type == "Ternary") {
+        NonNeg a = isExprNonNeg(e->children[1], facts);
+        NonNeg b = isExprNonNeg(e->children[2], facts);
+        if (a == NonNeg::True && b == NonNeg::True) return NonNeg::True;
+        if (a == NonNeg::False && b == NonNeg::False) return NonNeg::False;
+        return NonNeg::Unknown;
+    }
+    if (e->type == "BinOp") {
+        NonNeg L = isExprNonNeg(e->children[0], facts);
+        NonNeg R = isExprNonNeg(e->children[1], facts);
+        const std::string& op = e->value;
+        if (op == "+") {
+            if (L == NonNeg::True && R == NonNeg::True) return NonNeg::True;
+            if (L == NonNeg::False || R == NonNeg::False) return NonNeg::Unknown;
+            return NonNeg::Unknown;
+        }
+        if (op == "*") {
+            if (L == NonNeg::True && R == NonNeg::True) return NonNeg::True;
+            // negative * negative could be non-neg, but we don't prove it here
+            return NonNeg::Unknown;
+        }
+        // Other ops unknown
+        return NonNeg::Unknown;
+    }
+    return NonNeg::Unknown;
+}
+
+static int gSemanticErrors = 0;
+static void reportSemError(const std::string& msg) {
+    ++gSemanticErrors;
+    std::cerr << "[semantic error] " << msg << "\n";
+}
+
+static void learnFactsFromStmt(Node* n, Facts& facts) {
+    if (!n) return;
+    if (n->type == "Let" && !n->children.empty()) {
+        NonNeg nn = isExprNonNeg(n->children[0], facts);
+        if (nn != NonNeg::Unknown) facts.set(n->value, nn);
+    }
+    if (n->type == "Assign" && !n->children.empty()) {
+        Node* lhs = n->children[0];
+        if (lhs && lhs->type == "Var") {
+            const std::string& name = lhs->value;
+            if (n->value == "=" && n->children.size() > 1) {
+                NonNeg nn = isExprNonNeg(n->children[1], facts);
+                if (nn != NonNeg::Unknown) facts.set(name, nn);
+            }
+            else if (n->value == "+=" && n->children.size() > 1) {
+                NonNeg a = facts.get(name);
+                NonNeg b = isExprNonNeg(n->children[1], facts);
+                if (a == NonNeg::True && b == NonNeg::True) facts.set(name, NonNeg::True);
+            }
+            else if (n->value == "-=") {
+                // may break non-neg; mark unknown
+                facts.set(name, NonNeg::Unknown);
+            }
+        }
+    }
+    if (n->type == "Bounds" && n->children.size() == 3) {
+        const std::string& name = n->children[0]->value;
+        NonNeg mn = isExprNonNeg(n->children[1], facts);
+        if (mn == NonNeg::True) facts.set(name, NonNeg::True);
+    }
+}
+
+// Validate expressions for strong typing (basic checks)
+static void strongTypeCheckExpr(Node* e,
+    std::vector<std::unordered_map<std::string, TypeKindEx>>& typeScopes) {
+    if (!e) return;
+    if (e->type == "BinOp") {
+        TypeKindEx L = inferExprStrong(e->children[0], typeScopes);
+        TypeKindEx R = inferExprStrong(e->children[1], typeScopes);
+        const std::string& op = e->value;
+        auto isArith = [&](const std::string& s) { return s == "-" || s == "*" || s == "/" || s == "%"; };
+        auto isRel = [&](const std::string& s) { return s == "<" || s == ">" || s == "<=" || s == ">=" || s == "==" || s == "!="; };
+        if (op == "+") {
+            // ok for number+number or string+string; else flag
+            if (!((L == TypeKindEx::Number && R == TypeKindEx::Number) ||
+                (L == TypeKindEx::String && R == TypeKindEx::String))) {
+                reportSemError("Operator '+' requires both Number or both String operands");
+            }
+        }
+        else if (isArith(op)) {
+            if (!(L == TypeKindEx::Number && R == TypeKindEx::Number)) {
+                reportSemError("Arithmetic operator '" + op + "' requires Number operands");
+            }
+        }
+        else if (isRel(op)) {
+            if (!(L == TypeKindEx::Number && R == TypeKindEx::Number)) {
+                reportSemError("Relational operator '" + op + "' requires Number operands");
+            }
+        }
+    }
+    for (auto* c : e->children) strongTypeCheckExpr(c, typeScopes);
+}
+
+// ---- Function model + overlay constraints ----
+struct FunctionInfo {
+    std::string name;
+    std::vector<std::pair<std::string, TypeKindEx>> params; // {name, kind}
+    bool pure = false;                                       // overlay: pure
+    std::unordered_set<std::string> nonnegParams;            // overlay: nonneg_<param>
+};
+
+static std::unordered_map<std::string, FunctionInfo> gFunctions;
+
+// Extract function signature and overlay constraints (supports: "pure" and "nonneg_<paramName>")
+static void collectFunctionsAndConstraints(Node* root) {
+    gFunctions.clear();
+    if (!root) return;
+    std::function<void(Node*)> walk = [&](Node* n) {
+        if (!n) return;
+        if (n->type == "Fn") {
+            FunctionInfo fi;
+            fi.name = n->value;
+            for (auto* ch : n->children) {
+                if (ch->type == "Params") {
+                    for (auto* p : ch->children) {
+                        std::string pname = p->value;
+                        std::string pty = (!p->children.empty() ? p->children[0]->value : "auto");
+                        fi.params.emplace_back(pname, mapDeclaredTypeToKindEx(pty));
+                    }
+                }
+                else if (ch->type == "Overlay") {
+                    std::string ov = ch->value;
+                    std::string low = ov;
+                    std::transform(low.begin(), low.end(), low.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+                    if (low == "pure") {
+                        fi.pure = true;
+                    }
+                    else if (low.size() > 7 && low.rfind("nonneg_", 0) == 0) {
+                        // overlay syntax: nonneg_<paramName>
+                        std::string pname = low.substr(7);
+                        if (!pname.empty()) fi.nonnegParams.insert(pname);
+                    }
+                    else if (low == "nonnegative") {
+                        // If user added a generic nonnegative overlay without param, apply to all numeric params
+                        for (auto& pr : fi.params) fi.nonnegParams.insert(pr.first);
+                    }
+                }
+            }
+            gFunctions[fi.name] = std::move(fi);
+        }
+        for (auto* c : n->children) walk(c);
+        };
+    walk(root);
+}
+
+// ---- Side-effect classification for "pure" functions ----
+static bool isSideEffecting(Node* n) {
+    if (!n) return false;
+    static const std::unordered_set<std::string> se = {
+        "Print","Open","Write","Writeln","Read","Close","Send","Recv","Schedule","Sync","Mutate","Input","Checkpoint","VBreak"
+    };
+    return se.count(n->type) > 0;
+}
+
+// ---- Simple range/non-negativity facts ----
+enum class NonNeg { Unknown, False, True };
+
+struct Facts {
+    std::vector<std::unordered_map<std::string, NonNeg>> stack;
+    Facts() { stack.push_back({}); }
+    void push() { stack.push_back({}); }
+    void pop() { if (stack.size() > 1) stack.pop_back(); }
+    NonNeg get(const std::string& v) const {
+        for (auto it = stack.rbegin(); it != stack.rend(); ++it) {
+            auto f = it->find(v);
+            if (f != it->end()) return f->second;
+        }
+        return NonNeg::Unknown;
+    }
+    void set(const std::string& v, NonNeg nn) { stack.back()[v] = nn; }
+};
+
+static NonNeg isExprNonNeg(Node* e, const Facts& facts) {
+    if (!e) return NonNeg::Unknown;
+    if (e->type == "Num") {
+        double d = 0; if (toDouble(e->value, d)) return d >= 0 ? NonNeg::True : NonNeg::False;
+        return NonNeg::Unknown;
+    }
+    if (e->type == "Var") return facts.get(e->value);
+    if (e->type == "Ternary") {
+        NonNeg a = isExprNonNeg(e->children[1], facts);
+        NonNeg b = isExprNonNeg(e->children[2], facts);
+        if (a == NonNeg::True && b == NonNeg::True) return NonNeg::True;
+        if (a == NonNeg::False && b == NonNeg::False) return NonNeg::False;
+        return NonNeg::Unknown;
+    }
+    if (e->type == "BinOp") {
+        NonNeg L = isExprNonNeg(e->children[0], facts);
+        NonNeg R = isExprNonNeg(e->children[1], facts);
+        const std::string& op = e->value;
+        if (op == "+") {
+            if (L == NonNeg::True && R == NonNeg::True) return NonNeg::True;
+            if (L == NonNeg::False || R == NonNeg::False) return NonNeg::Unknown;
+            return NonNeg::Unknown;
+        }
+        if (op == "*") {
+            if (L == NonNeg::True && R == NonNeg::True) return NonNeg::True;
+            // negative * negative could be non-neg, but we don't prove it here
+            return NonNeg::Unknown;
+        }
+        // Other ops unknown
+        return NonNeg::Unknown;
+    }
+    return NonNeg::Unknown;
+}
+
+static int gSemanticErrors = 0;
+static void reportSemError(const std::string& msg) {
+    ++gSemanticErrors;
+    std::cerr << "[semantic error] " << msg << "\n";
+}
+
+static void learnFactsFromStmt(Node* n, Facts& facts) {
+    if (!n) return;
+    if (n->type == "Let" && !n->children.empty()) {
+        NonNeg nn = isExprNonNeg(n->children[0], facts);
+        if (nn != NonNeg::Unknown) facts.set(n->value, nn);
+    }
+    if (n->type == "Assign" && !n->children.empty()) {
+        Node* lhs = n->children[0];
+        if (lhs && lhs->type == "Var") {
+            const std::string& name = lhs->value;
+            if (n->value == "=" && n->children.size() > 1) {
+                NonNeg nn = isExprNonNeg(n->children[1], facts);
+                if (nn != NonNeg::Unknown) facts.set(name, nn);
+            }
+            else if (n->value == "+=" && n->children.size() > 1) {
+                NonNeg a = facts.get(name);
+                NonNeg b = isExprNonNeg(n->children[1], facts);
+                if (a == NonNeg::True && b == NonNeg::True) facts.set(name, NonNeg::True);
+            }
+            else if (n->value == "-=") {
+                // may break non-neg; mark unknown
+                facts.set(name, NonNeg::Unknown);
+            }
+        }
+    }
+    if (n->type == "Bounds" && n->children.size() == 3) {
+        const std::string& name = n->children[0]->value;
+        NonNeg mn = isExprNonNeg(n->children[1], facts);
+        if (mn == NonNeg::True) facts.set(name, NonNeg::True);
+    }
+}
+
+// Validate expressions for strong typing (basic checks)
+static void strongTypeCheckExpr(Node* e,
+    std::vector<std::unordered_map<std::string, TypeKindEx>>& typeScopes) {
+    if (!e) return;
+    if (e->type == "BinOp") {
+        TypeKindEx L = inferExprStrong(e->children[0], typeScopes);
+        TypeKindEx R = inferExprStrong(e->children[1], typeScopes);
+        const std::string& op = e->value;
+        auto isArith = [&](const std::string& s) { return s == "-" || s == "*" || s == "/" || s == "%"; };
+        auto isRel = [&](const std::string& s) { return s == "<" || s == ">" || s == "<=" || s == ">=" || s == "==" || s == "!="; };
+        if (op == "+") {
+            // ok for number+number or string+string; else flag
+            if (!((L == TypeKindEx::Number && R == TypeKindEx::Number) ||
+                (L == TypeKindEx::String && R == TypeKindEx::String))) {
+                reportSemError("Operator '+' requires both Number or both String operands");
+            }
+        }
+        else if (isArith(op)) {
+            if (!(L == TypeKindEx::Number && R == TypeKindEx::Number)) {
+                reportSemError("Arithmetic operator '" + op + "' requires Number operands");
+            }
+        }
+        else if (isRel(op)) {
+            if (!(L == TypeKindEx::Number && R == TypeKindEx::Number)) {
+                reportSemError("Relational operator '" + op + "' requires Number operands");
+            }
+        }
+    }
+    for (auto* c : e->children) strongTypeCheckExpr(c, typeScopes);
+}
+
+// ---- Function model + overlay constraints ----
+struct FunctionInfo {
+    std::string name;
+    std::vector<std::pair<std::string, TypeKindEx>> params; // {name, kind}
+    bool pure = false;                                       // overlay: pure
+    std::unordered_set<std::string> nonnegParams;            // overlay: nonneg_<param>
+};
+
+static std::unordered_map<std::string, FunctionInfo> gFunctions;
+
+// Extract function signature and overlay constraints (supports: "pure" and "nonneg_<paramName>")
+static void collectFunctionsAndConstraints(Node* root) {
+    gFunctions.clear();
+    if (!root) return;
+    std::function<void(Node*)> walk = [&](Node* n) {
+        if (!n) return;
+        if (n->type == "Fn") {
+            FunctionInfo fi;
+            fi.name = n->value;
+            for (auto* ch : n->children) {
+                if (ch->type == "Params") {
+                    for (auto* p : ch->children) {
+                        std::string pname = p->value;
+                        std::string pty = (!p->children.empty() ? p->children[0]->value : "auto");
+                        fi.params.emplace_back(pname, mapDeclaredTypeToKindEx(pty));
+                    }
+                }
+                else if (ch->type == "Overlay") {
+                    std::string ov = ch->value;
+                    std::string low = ov;
+                    std::transform(low.begin(), low.end(), low.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+                    if (low == "pure") {
+                        fi.pure = true;
+                    }
+                    else if (low.size() > 7 && low.rfind("nonneg_", 0) == 0) {
+                        // overlay syntax: nonneg_<paramName>
+                        std::string pname = low.substr(7);
+                        if (!pname.empty()) fi.nonnegParams.insert(pname);
+                    }
+                    else if (low == "nonnegative") {
+                        // If user added a generic nonnegative overlay without param, apply to all numeric params
+                        for (auto& pr : fi.params) fi.nonnegParams.insert(pr.first);
+                    }
+                }
+            }
+            gFunctions[fi.name] = std::move(fi);
+        }
+        for (auto* c : n->children) walk(c);
+        };
+    walk(root);
+}
+
+// ---- Side-effect classification for "pure" functions ----
+static bool isSideEffecting(Node* n) {
+    if (!n) return false;
+    static const std::unordered_set<std::string> se = {
+        "Print","Open","Write","Writeln","Read","Close","Send","Recv","Schedule","Sync","Mutate","Input","Checkpoint","VBreak"
+    };
+    return se.count(n->type) > 0;
+}
+
+// ---- Simple range/non-negativity facts ----
+enum class NonNeg { Unknown, False, True };
+
+struct Facts {
+    std::vector<std::unordered_map<std::string, NonNeg>> stack;
+    Facts() { stack.push_back({}); }
+    void push() { stack.push_back({}); }
+    void pop() { if (stack.size() > 1) stack.pop_back(); }
+    NonNeg get(const std::string& v) const {
+        for (auto it = stack.rbegin(); it != stack.rend(); ++it) {
+            auto f = it->find(v);
+            if (f != it->end()) return f->second;
+        }
+        return NonNeg::Unknown;
+    }
+    void set(const std::string& v, NonNeg nn) { stack.back()[v] = nn; }
+};
+
+static NonNeg isExprNonNeg(Node* e, const Facts& facts) {
+    if (!e) return NonNeg::Unknown;
+    if (e->type == "Num") {
+        double d = 0; if (toDouble(e->value, d)) return d >= 0 ? NonNeg::True : NonNeg::False;
+        return NonNeg::Unknown;
+    }
+    if (e->type == "Var") return facts.get(e->value);
+    if (e->type == "Ternary") {
+        NonNeg a = isExprNonNeg(e->children[1], facts);
+        NonNeg b = isExprNonNeg(e->children[2], facts);
+        if (a == NonNeg::True && b == NonNeg::True) return NonNeg::True;
+        if (a == NonNeg::False && b == NonNeg::False) return NonNeg::False;
+        return NonNeg::Unknown;
+    }
+    if (e->type == "BinOp") {
+        NonNeg L = isExprNonNeg(e->children[0], facts);
+        NonNeg R = isExprNonNeg(e->children[1], facts);
+        const std::string& op = e->value;
+        if (op == "+") {
+            if (L == NonNeg::True && R == NonNeg::True) return NonNeg::True;
+            if (L == NonNeg::False || R == NonNeg::False) return NonNeg::Unknown;
+            return NonNeg::Unknown;
+        }
+        if (op == "*") {
+            if (L == NonNeg::True && R == NonNeg::True) return NonNeg::True;
+            // negative * negative could be non-neg, but we don't prove it here
+            return NonNeg::Unknown;
+        }
+        // Other ops unknown
+        return NonNeg::Unknown;
+    }
+    return NonNeg::Unknown;
+}
+
+static int gSemanticErrors = 0;
+static void reportSemError(const std::string& msg) {
+    ++gSemanticErrors;
+    std::cerr << "[semantic error] " << msg << "\n";
+}
+
+static void learnFactsFromStmt(Node* n, Facts& facts) {
+    if (!n) return;
+    if (n->type == "Let" && !n->children.empty()) {
+        NonNeg nn = isExprNonNeg(n->children[0], facts);
+        if (nn != NonNeg::Unknown) facts.set(n->value, nn);
+    }
+    if (n->type == "Assign" && !n->children.empty()) {
+        Node* lhs = n->children[0];
+        if (lhs && lhs->type == "Var") {
+            const std::string& name = lhs->value;
+            if (n->value == "=" && n->children.size() > 1) {
+                NonNeg nn = isExprNonNeg(n->children[1], facts);
+                if (nn != NonNeg::Unknown) facts.set(name, nn);
+            }
+            else if (n->value == "+=" && n->children.size() > 1) {
+                NonNeg a = facts.get(name);
+                NonNeg b = isExprNonNeg(n->children[1], facts);
+                if (a == NonNeg::True && b == NonNeg::True) facts.set(name, NonNeg::True);
+            }
+            else if (n->value == "-=") {
+                // may break non-neg; mark unknown
+                facts.set(name, NonNeg::Unknown);
+            }
+        }
+    }
+    if (n->type == "Bounds" && n->children.size() == 3) {
+        const std::string& name = n->children[0]->value;
+        NonNeg mn = isExprNonNeg(n->children[1], facts);
+        if (mn == NonNeg::True) facts.set(name, NonNeg::True);
+    }
+}
+
+// Validate expressions for strong typing (basic checks)
+static void strongTypeCheckExpr(Node* e,
+    std::vector<std::unordered_map<std::string, TypeKindEx>>& typeScopes) {
+    if (!e) return;
+    if (e->type == "BinOp") {
+        TypeKindEx L = inferExprStrong(e->children[0], typeScopes);
+        TypeKindEx R = inferExprStrong(e->children[1], typeScopes);
+        const std::string& op = e->value;
+        auto isArith = [&](const std::string& s) { return s == "-" || s == "*" || s == "/" || s == "%"; };
+        auto isRel = [&](const std::string& s) { return s == "<" || s == ">" || s == "<=" || s == ">=" || s == "==" || s == "!="; };
+        if (op == "+") {
+            // ok for number+number or string+string; else flag
+            if (!((L == TypeKindEx::Number && R == TypeKindEx::Number) ||
+                (L == TypeKindEx::String && R == TypeKindEx::String))) {
+                reportSemError("Operator '+' requires both Number or both String operands");
+            }
+        }
+        else if (isArith(op)) {
+            if (!(L == TypeKindEx::Number && R == TypeKindEx::Number)) {
+                reportSemError("Arithmetic operator '" + op + "' requires Number operands");
+            }
+        }
+        else if (isRel(op)) {
+            if (!(L == TypeKindEx::Number && R == TypeKindEx::Number)) {
+                reportSemError("Relational operator '" + op + "' requires Number operands");
+            }
+        }
+    }
+    for (auto* c : e->children) strongTypeCheckExpr(c, typeScopes);
+}
+
+// ---- Enforce function purity and nonneg param constraints ----
+static void enforceFunctionBodyConstraints(Node* fnNode,
+    const FunctionInfo& fi,
+    const std::unordered_map<std::string, FunctionInfo>& fnMap) {
+    // Gather parameter set for quick lookup and track locals from let
+    std::unordered_set<std::string> paramSet;
+    for (auto& p : fi.params) paramSet.insert(p.first);
+
+    Facts facts; // non-negativity facts
+    // Start with nonneg facts for parameters that are declared nonneg (assume true)
+    for (const auto& p : fi.nonnegParams) facts.set(p, NonNeg::True);
+
+    // Strong type scopes seeded with parameters
+    std::vector<std::unordered_map<std::string, TypeKindEx>> typeScopes(1);
+    for (auto& pr : fi.params) typeScopes.back()[pr.first] = pr.second;
+
+    std::function<void(Node*)> walk = [&](Node* n) {
+        if (!n) return;
+        if (fi.pure && isSideEffecting(n)) {
+            reportSemError("Function '" + fi.name + "' is pure but performs side-effect: " + n->type);
+        }
+        if (fi.pure && n->type == "Assign" && !n->children.empty() && n->children[0]->type == "Var") {
+            const std::string& target = n->children[0]->value;
+            if (paramSet.count(target)) {
+                reportSemError("Function '" + fi.name + "' is pure; must not reassign parameter '" + target + "'");
+            }
+        }
+        if ((n->type == "Call" || n->type == "CallExpr") && fi.pure) {
+            // impure callee in pure context
+            std::string callee = (n->type == "Call") ? n->value : n->value;
+            auto it = fnMap.find(callee);
+            if (it != fnMap.end() && !it->second.pure) {
+                reportSemError("Function '" + fi.name + "' is pure but calls impure function '" + callee + "'");
+            }
+        }
+
+        // Type checks on expressions
+        if (n->type == "Print") {
+            if (!n->children.empty()) strongTypeCheckExpr(n->children[0], typeScopes);
+        }
+        else if (n->type == "Let") {
+            if (!n->children.empty()) {
+                strongTypeCheckExpr(n->children[0], typeScopes);
+                // If it's clearly string/number, update local type
+                TypeKindEx k = inferExprStrong(n->children[0], typeScopes);
+                if (k != TypeKindEx::Unknown) typeScopes.back()[n->value] = k;
+            }
+        }
+        else if (n->type == "Assign") {
+            if (n->children.size() > 1) strongTypeCheckExpr(n->children[1], typeScopes);
+        }
+        else if (n->type == "Scale" || n->type == "Bounds") {
+            // All expressions should be numeric
+            for (size_t i = 1; i < n->children.size(); ++i) {
+                TypeKindEx k = inferExprStrong(n->children[i], typeScopes);
+                if (k == TypeKindEx::String) {
+                    reportSemError("'" + n->type + "' expects Number expressions, got String");
+                }
+            }
+        }
+
+        // Learn nonneg facts from simple statements
+        learnFactsFromStmt(n, facts);
+
+        // Recurse
+        for (auto* c : n->children) walk(c);
+        };
+
+    // Find function body and walk it
+    Node* body = nullptr;
+    for (auto* ch : fnNode->children) if (ch->type == "Body") { body = ch; break; }
+    if (body) walk(body);
+}
+
+static void enforceCallSiteConstraints(Node* root,
+    const std::unordered_map<std::string, FunctionInfo>& fnMap) {
+    Facts facts;
+    std::function<void(Node*)> walk = [&](Node* n) {
+        if (!n) return;
+        if (n->type == "Body" || n->type == "Program") {
+            facts.push();
+            for (auto* c : n->children) {
+                // learn facts in sequence
+                learnFactsFromStmt(c, facts);
+                walk(c);
+            }
+            facts.pop();
+            return;
+        }
+        if (n->type == "Call" || n->type == "CallExpr") {
+            const std::string callee = n->value;
+            auto it = fnMap.find(callee);
+            if (it != fnMap.end()) {
+                const FunctionInfo& fi = it->second;
+                // Build param index map
+                std::unordered_map<std::string, size_t> idx;
+                for (size_t i = 0; i < fi.params.size(); ++i) idx[fi.params[i].first] = i;
+                for (const auto& p : fi.nonnegParams) {
+                    auto posIt = idx.find(p);
+                    if (posIt != idx.end()) {
+                        size_t argIdx = posIt->second;
+                        if (argIdx < n->children.size()) {
+                            NonNeg res = isExprNonNeg(n->children[argIdx], facts);
+                            if (res == NonNeg::False) {
+                                reportSemError("Call to '" + callee + "' violates nonneg constraint for parameter '" + p + "'");
+                            }
+                            else if (res == NonNeg::Unknown) {
+                                // Warning could be implemented; we keep strictness to errors only when proven negative
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        for (auto* c : n->children) walk(c);
+    };
+    walk(root);
+}
+
+static void enforceSemanticConstraints(Node* root) {
+    gSemanticErrors = 0;
+    collectFunctionsAndConstraints(root);
+    // Enforce function-level constraints
+    for (auto& kv : gFunctions) {
+        // Locate the function node
+        Node* fnNode = nullptr;
+        std::function<void(Node*)> findFn = [&](Node* n) {
+            if (!n || fnNode) return;
+            if (n->type == "Fn" && n->value == kv.first) { fnNode = n; return; }
+            for (auto* c : n->children) findFn(c);
+            };
+        findFn(root);
+        if (fnNode) enforceFunctionBodyConstraints(fnNode, kv.second, gFunctions);
+    }
+    // Enforce call-site parameter constraints across program
+    enforceCallSiteConstraints(root, gFunctions);
+
+    if (gSemanticErrors > 0) {
+        throw std::runtime_error("Semantic validation failed with " + std::to_string(gSemanticErrors) + " error(s).");
+    }
+}
+
+// [CHANGED] Call the new semantic enforcement right after basic analysis
+// ...
+        // Analyze types
+std::vector<std::unordered_map<std::string, TypeKind>> scopes;
+analyze(ast, scopes);
+emitEventAst("analyzed", ast);
+
+// Enforce strong typing and overlay-driven semantic constraints
+enforceSemanticConstraints(ast);
+
+// Plugin transforms before optimize
+runTransforms("before-opt", ast);
+
+// [ADD] at top includes
+#include <cstdio>   // popen/_popen
+// [ADD] Build options, metadata & hooks utilities (place after emitEventText/runTransforms section)
+
+// Build configuration parsed from CLI
+struct BuildConfig {
+    std::string cc;       // compiler (clang++, clang-cl, g++, cl)
+    std::string stdver;   // c++14, c++17, c++20
+    std::string opt;      // O0/O1/O2/O3
+    std::string diagFmt;  // msvc or clang
+    bool color = true;
+};
+
+static BuildConfig gBuild;
+static std::string gSourcePath; // .case path used for #line mapping
+
+// Metadata bag to embed into generated output
+static std::unordered_map<std::string, std::string> gMeta;
+
+static void setMeta(const std::string& k, const std::string& v) { gMeta[k] = v; }
+static std::string getMetadataJson() {
+    std::ostringstream os;
+    os << "{";
+    bool first = true;
+    for (auto& kv : gMeta) {
+        if (!first) os << ",";
+        os << "\"" << kv.first << "\":\"" << kv.second << "\"";
+        first = false;
+    }
+    os << "}";
+    return os.str();
+}
+
+// Simple process runner with output capture
+struct ProcResult { int exitCode; std::string output; };
+static ProcResult runProcessCapture(const std::string& cmd) {
+#if defined(_WIN32)
+    std::string full = cmd + " 2>&1";
+    FILE* pipe = _popen(full.c_str(), "r");
+    if (!pipe) return { -1, "failed to start: " + cmd };
+    std::string out;
+    char buf[4096];
+    while (size_t n = std::fread(buf, 1, sizeof(buf), pipe)) out.append(buf, n);
+    int rc = _pclose(pipe);
+    return { rc, out };
+#else
+    std::string full = cmd + " 2>&1";
+    FILE* pipe = popen(full.c_str(), "r");
+    if (!pipe) return { -1, "failed to start: " + cmd };
+    std::string out;
+    char buf[4096];
+    while (size_t n = std::fread(buf, 1, sizeof(buf), pipe)) out.append(buf, n);
+    int rc = pclose(pipe);
+    return { rc, out };
+#endif
+}
+
+// Hook helpers for consistent phase names
+static void hookInspect(const char* phase, Node* root) { emitEventAst(phase, root); }
+static void hookMutate(const char* phase, Node*& root) { runTransforms(phase, root); }
+// [MODIFY] emitPrelude to embed metadata banner
+static void emitPrelude(std::ostringstream& out) {
+    // Metadata banner (JSON) embedded as comment + global string
+    const std::string meta = getMetadataJson();
+    out << "/* CASE metadata: " << meta << " */\n";
+    out << "static const char* __CASE_METADATA = R\"(" << meta << ")\";\n";
+
+    out << "#include <iostream>\n";
+    out << "#include <fstream>\n";
+    out << "#include <cmath>\n";
+    out << "#include <vector>\n";
+    out << "#include <deque>\n";
+    out << "#include <mutex>\n";
+    out << "#include <condition_variable>\n";
+    out << "#include <functional>\n";
+    out << "#include <algorithm>\n";
+    out << "#if defined(_OPENMP)\n#include <omp.h>\n#endif\n";
+    // Simple channel template
+    out << "template<typename T>\n";
+    out << "struct Channel {\n";
+    out << "  std::mutex m; std::condition_variable cv; std::deque<T> q;\n";
+    out << "  void send(const T& v){ std::lock_guard<std::mutex> lk(m); q.push_back(v); cv.notify_one(); }\n";
+    out << "  void recv(T& out){ std::unique_lock<std::mutex> lk(m); cv.wait(lk,[&]{return !q.empty();}); out = std::move(q.front()); q.pop_front(); }\n";
+    out << "};\n\n";
+}
+// [REPLACE] tryNativeBuild with configurable flags + captured diagnostics
+static bool tryNativeBuild(const std::string& outExe, const BuildConfig& cfg, const std::string& sourceCpp) {
+    const char* noCompile = std::getenv("CASEC_NO_COMPILE");
+    if (noCompile && std::string(noCompile) == "1") return true;
+
+    auto fmtStd = [&]()->std::string {
+        if (cfg.stdver == "c++17") return "-std=c++17";
+        if (cfg.stdver == "c++20") return "-std=c++20";
+        return "-std=c++14";
+    };
+
+#if defined(_WIN32)
+    // Prefer clang-cl, allow override via cfg.cc
+    std::string cc = cfg.cc.empty() ? "clang-cl" : cfg.cc;
+    ProcResult pr{0,""};
+    if (cc == "clang-cl") {
+        std::ostringstream clir;
+        clir << "clang-cl /EHsc /DNDEBUG /openmp "
+             << "/O" << (cfg.opt.empty() ? "2" : cfg.opt.substr(1)) << " "
+             << "/std:" << (cfg.stdver.empty() ? "c++14" : cfg.stdver) << " "
+             << quote(sourceCpp) << " /link /OUT:" << quote(outExe);
+        pr = runProcessCapture(clir.str());
+        if (pr.exitCode != 0) {
+            // Fallback to clang++
+            std::ostringstream cc2;
+            cc2 << "clang++ " << fmtStd() << " -" << (cfg.opt.empty() ? "O2" : cfg.opt)
+                << " -fopenmp -DNDEBUG " << quote(sourceCpp) << " -o " << quote(outExe);
+            pr = runProcessCapture(cc2.str());
+        }
+    } else if (cc == "cl") {
+        std::ostringstream clir;
+        clir << "cl /EHsc /nologo /DNDEBUG /openmp "
+             << "/O" << (cfg.opt.empty() ? "2" : cfg.opt.substr(1)) << " "
+             << "/std:" << (cfg.stdver.empty() ? "c++14" : cfg.stdver) << " "
+             << quote(sourceCpp) << " /Fe" << quote(outExe);
+        pr = runProcessCapture(clir.str());
+    } else {
+        // Use provided cc directly
+        std::ostringstream any;
+        any << cc << " " << fmtStd() << " -" << (cfg.opt.empty() ? "O2" : cfg.opt)
+            << " -fopenmp -DNDEBUG " << quote(sourceCpp) << " -o " << quote(outExe);
+        pr = runProcessCapture(any.str());
+    }
+    std::cout << pr.output;
+    return pr.exitCode == 0;
+#else
+    std::string cc = cfg.cc.empty() ? "clang++" : cfg.cc;
+    std::ostringstream cmd;
+    cmd << cc << " " << fmtStd() << " -" << (cfg.opt.empty() ? "O2" : cfg.opt)
+        << " -flto -march=native -fopenmp -DNDEBUG "
+        << quote(sourceCpp) << " -o " << quote(outExe);
+    ProcResult pr = runProcessCapture(cmd.str());
+    std::cout << pr.output;
+    return pr.exitCode == 0;
+#endif
+}
