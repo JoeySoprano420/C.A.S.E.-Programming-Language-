@@ -1187,3 +1187,61 @@ The compiler supports overlays like:
 
 ---
 
+Integration: commands & wiring
+
+Because the expander is itself a C.A.S.E. program, we need a small host-driver step to run it. You have two options:
+
+Option A — Quick path (recommended)
+
+Transpile ciam_expander.case to C++ using your current transpiler:
+
+./transpiler.exe ciam_expander.case
+g++ -std=c++17 ciam_expander.cpp -o expander_host.exe
+
+
+(Here you must provide/implement call_native_readfile and call_native_writefile primitives in the generated ciam_expander.cpp — easiest is to edit ciam_expander.cpp and replace those call_native_* invocations with direct file IO, or add a tiny C++ shim.)
+
+Run the expander to produce the expanded source:
+
+./expander_host.exe ciam.def.case example_app.case expanded.example.case
+
+
+Transpile the expanded file with your bootstrap transpiler:
+
+./transpiler.exe expanded.example.case
+g++ -std=c++17 compiler.cpp -o example_app.exe -lm
+./example_app.exe
+
+
+Option B — Inline modification to your C++ transpiler
+
+Modify your C++ transpiler or its driver so that before tokenization it:
+
+Loads ciam.def.case and extracts CIAM blocks.
+
+Emits Fn definitions for each CIAM and prepends them to the source being transpiled.
+
+Continues with the normal tokenization/parsing/emission phases.
+
+This is straightforward: in your Compiler.cpp (Phase 1 transpiler) add a function that scans the source for CIAM occurrences and emits Fn strings exactly as shown above, then src = fn_defs + src before tokenize(src).
+
+Type system note: CIAM bodies and expander are intentionally permissive about value types; if you want strict typing the expander can accept a CIAM signature (e.g., CIAM sinValue(arg:double)) and use it to emit Fn sinValue "double arg" with exact types.
+
+Examples & Test cases (quick checklist)
+
+Create files:
+
+ciam.def.case (from above)
+
+ciam_expander.case (from above)
+
+example_app.case (from above)
+
+Transpile & compile the expander (edit generated C++ to add real readFile/writeFile if needed), or modify the transpiler to run expansion inline.
+
+Run the expander to create expanded.example.case.
+
+Transpile expanded.example.case with your transpiler → compile → run.
+
+You should see cosine/sine/log prints and the timestamped log.
+
