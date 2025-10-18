@@ -1,6 +1,5 @@
 // Compiler.cpp - Single translation unit for a CASE Programming Language -> C++ transpiler (C++14)
 
-#pragma once
 #include <string>
 #include <unordered_map>
 #include <fstream>
