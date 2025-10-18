@@ -1,0 +1,19 @@
+# example_app.case
+# This file uses CIAMs defined in ciam.def.case
+
+Print "Starting example app that uses CIAMs..." [end]
+
+# use CIAMs just like normal functions
+let angle = 1.0471975512  # radians (~60°)
+
+let s = call sinValue angle [end]
+Print "sin(60°) ~ " [end]
+
+let c = call cosValue angle [end]
+Print "cos(60°) ~ " [end]
+
+let l = call logValue 10.0 [end]
+Print "log(10) ~ " [end]
+
+# timestamped log - sample macro that prints a stamp + message
+call timestampedLog "Demo run complete." [end]
