@@ -12989,3 +12989,6 @@ static void emitNode(Node* n, std::ostringstream& out) {
         out << "}\n";
     }
 
+else if (n->type == "Match") {
+    emitMatch(out, n);
+}
