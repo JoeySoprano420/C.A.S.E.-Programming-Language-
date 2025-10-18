@@ -1,0 +1,93 @@
+# ciam_expander.case
+# Usage (after compiled to expander.exe): 
+#   ./expander.exe ciam.def.case example_app.case expanded.example.case
+
+Fn readFile "string path" (
+  # host transpiler will implement readFile; if not, it can be provided in C++ driver.
+  ret call_native_readfile path [end]   # placeholder for actual host-provided readFile binding
+) [end]
+
+Fn writeFile "string path, string content" (
+  ret call_native_writefile path content [end]  # placeholder binding to host write
+) [end]
+
+Fn extractCIAMs "string defsSrc" (
+  # Very simple parser: locate CIAM <name> { ... } [end] blocks and collect them.
+  let i = 0
+  let len = call strlen defsSrc [end]
+  let macros = []           # will accumulate macro entries as strings "name||body"
+  loop "i < len" {
+    # find 'CIAM ' token
+    let rest = call substr defsSrc i (len - i) [end]
+    let posCIAM = call indexOf rest "CIAM " [end]
+    if posCIAM == -1 { break } else { i = i + posCIAM }
+    # advance past "CIAM "
+    i = i + 5
+    # read name
+    let name = ""
+    while i < len && defsSrc[i] != ' ' && defsSrc[i] != '{' {
+      name = name + defsSrc[i]
+      i = i + 1
+    } [end]
+    # skip until '{'
+    while i < len && defsSrc[i] != '{' { i = i + 1 } [end]
+    if i >= len { break }
+    # skip '{'
+    i = i + 1
+    # collect body until matching '}'
+    let depth = 1
+    let body = ""
+    while i < len && depth > 0 {
+      if defsSrc[i] == '{' { depth = depth + 1; body = body + "{"; i = i + 1 }
+      else if defsSrc[i] == '}' { depth = depth - 1; if depth > 0 { body = body + "}" } ; i = i + 1 }
+      else { body = body + defsSrc[i]; i = i + 1 }
+    } [end]
+    # advance to closing ] of the CIAM block (search for "[end]")
+    let closePos = call indexOf defsSrc i "[end]" [end]
+    if closePos != -1 { i = i + closePos + 5 } [end]
+    # store macro in macros array as "name||body"
+    call push macros (name + "||" + body) [end]
+  } [end]
+  ret macros
+) [end]
+
+Fn buildFnFromCIAM "string name, string body" (
+  # Create a C.A.S.E. Fn wrapper. We assume single arg 'arg' of type double for now.
+  let fnDef = ""
+  fnDef = fnDef + "Fn " + name + \" \\\"double arg\\\" (\\n\"
+  # inject body lines (trim as needed)
+  fnDef = fnDef + body + \"\\n) [end]\\n\\n\"
+  ret fnDef
+) [end]
+
+Fn expandFile "string ciamPath, string targetPath, string outPath" (
+  let defsSrc = call readFile ciamPath [end]
+  let targetSrc = call readFile targetPath [end]
+  let macros = call extractCIAMs defsSrc [end]
+
+  # build function definitions from macros
+  let i = 0
+  let built = ""
+  loop "i < macros.size()" {
+    let entry = macros[i]
+    # split on "||"
+    let sepPos = call indexOf entry "||" [end]
+    let name = call substr entry 0 sepPos [end]
+    let body = call substr entry (sepPos + 2) (entry.length() - (sepPos + 2)) [end]
+    let fnstr = call buildFnFromCIAM name body [end]
+    built = built + fnstr
+    i = i + 1
+  } [end]
+
+  # Prepend built Fn defs to target source
+  let expanded = built + "\\n" + targetSrc
+  call writeFile outPath expanded [end]
+  ret expanded
+) [end]
+
+Fn main "string argv" (
+  # Expect host to call this function with args: ciam.def.case, example_app.case, expanded.example.case
+  Print "CIAM expander bootstrap" [end]
+  # In practice, the C++ driver should call expandFile directly
+  ret 0
+) [end]
