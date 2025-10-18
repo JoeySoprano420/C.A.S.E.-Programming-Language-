@@ -13917,3 +13917,418 @@ else if (n->type == "Derivative") {
                                             }
 
 
+                                            // Replace the existing Duration/Derivative placeholders and add Input emission
+                                            // in the first emitNode(...) implementation you actually use (the one used by emitCPP).
+
+                                            // Find: static void emitNode(Node* n, std::ostringstream& out) { ... }
+                                            // And update these branches:
+
+                                            else if (n->type == "Duration") {
+                                                // Before: placeholder comment
+                                                // After: convert to std::chrono duration, keep it in a scoped variable to avoid name clashes.
+                                                std::string unit = (n->children.size() > 1 ? n->children[1]->value : "ms");
+                                                std::string u = unit; std::transform(u.begin(), u.end(), u.begin(), ::tolower);
+                                                const char* chronoUnit =
+                                                    (u == "ns" || u == "nanoseconds") ? "std::chrono::nanoseconds" :
+                                                    (u == "us" || u == "microseconds") ? "std::chrono::microseconds" :
+                                                    (u == "ms" || u == "milliseconds") ? "std::chrono::milliseconds" :
+                                                    (u == "s" || u == "sec" || u == "seconds") ? "std::chrono::seconds" :
+                                                    (u == "m" || u == "min" || u == "minutes") ? "std::chrono::minutes" :
+                                                    (u == "h" || u == "hour" || u == "hours") ? "std::chrono::hours" : "std::chrono::milliseconds";
+                                                out << "{ using namespace std::chrono; auto __dur_val = " << emitExpr(n->children[0]) << "; "
+                                                    << chronoUnit << " __dur = duration_cast<" << chronoUnit << ">(duration<double>(__dur_val)); "
+                                                    << "(void)__dur; }\n";
+                                            }
+                                            else if (n->type == "Derivative") {
+                                                // Before: placeholder comment
+                                                // After: numeric forward-difference derivative; requires 'wrt <var>' to be present.
+                                                if (n->children.size() >= 2 && n->children[1]->type == "Var") {
+                                                    const std::string var = n->children[1]->value;
+                                                    const std::string f = emitExpr(n->children[0]);
+                                                    out << "{ auto __eps = 1e-6; auto __orig = (" << var << "); "
+                                                        "auto __f0 = (double)(" << f << "); "
+                                                        << var << " = __orig + __eps; "
+                                                        "auto __f1 = (double)(" << f << "); "
+                                                        << var << " = __orig; "
+                                                        "double __deriv = (__f1 - __f0) / __eps; (void)__deriv; }\n";
+                                                }
+                                                else {
+                                                    out << "{ /* derivative missing 'wrt <var>' */ double __deriv = 0.0; (void)__deriv; }\n";
+                                                }
+                                            }
+                                            else if (n->type == "Input") {
+                                                // Emit a simple read from stdin into a variable
+                                                out << "std::cin >> " << n->value << ";\n";
+                                            }
+
+                                            // ------------------------ Emitter ------------------------
+
+                                            static std::string escapeCppString(const std::string& s) {
+                                                std::string out;
+                                                out.reserve(s.size() + 8);
+                                                for (char c : s) {
+                                                    switch (c) {
+                                                    case '\\': out += "\\\\"; break;
+                                                    case '"':  out += "\\\""; break;
+                                                    case '\n': out += "\\n"; break;
+                                                    case '\t': out += "\\t"; break;
+                                                    case '\r': out += "\\r"; break;
+                                                    default:   out.push_back(c); break;
+                                                    }
+                                                }
+                                                return out;
+                                            }
+
+                                            static std::string emitExpr(Node* e);
+
+                                            static std::string emitExpr(Node* e) {
+                                                if (!e) return "0";
+                                                if (e->type == "Num") return e->value;
+                                                if (e->type == "Var") return e->value;
+                                                if (e->type == "Str") {
+                                                    return std::string("\"") + escapeCppString(e->value) + "\"";
+                                                }
+                                                if (e->type == "BinOp") {
+                                                    std::string lhs = emitExpr(e->children.size() > 0 ? e->children[0] : nullptr);
+                                                    std::string rhs = emitExpr(e->children.size() > 1 ? e->children[1] : nullptr);
+                                                    return "(" + lhs + " " + e->value + " " + rhs + ")";
+                                                }
+                                                // Legacy nodes support
+                                                if (e->type == "ExprNum") return e->value;
+                                                if (e->type == "ExprIdent") return e->value;
+                                                if (e->type == "ExprStr") return std::string("\"") + escapeCppString(e->value) + "\"";
+                                                return "/*expr*/0";
+                                            }
+
+                                            static void emitNode(Node* n, std::ostringstream& out);
+
+                                            static void emitChildren(const std::vector<Node*>& cs, std::ostringstream& out) {
+                                                for (auto* c : cs) emitNode(c, out);
+                                            }
+
+                                            static void emitPrintChain(std::ostringstream& out, Node* expr) {
+                                                // Stream-print expression; flatten '+' into stream chain
+                                                if (!expr) { out << "std::cout << std::endl;\n"; return; }
+                                                std::vector<Node*> parts;
+                                                std::function<void(Node*)> flatten = [&](Node* e) {
+                                                    if (!e) return;
+                                                    if (e->type == "BinOp" && e->value == "+") { flatten(e->children[0]); flatten(e->children[1]); }
+                                                    else parts.push_back(e);
+                                                    };
+                                                flatten(expr);
+                                                out << "std::cout";
+                                                if (parts.empty()) {
+                                                    out << " << " << emitExpr(expr) << " << std::endl;\n";
+                                                    return;
+                                                }
+                                                for (auto* p : parts) out << " << " << emitExpr(p);
+                                                out << " << std::endl;\n";
+                                            }
+
+                                            static std::string toIosMode(const std::string& mode) {
+                                                // modes: "out", "in", "app", "binary" (combine separated by '|': "out|app")
+                                                if (mode.empty()) return "std::ios::out";
+                                                std::string m = mode;
+                                                // remove spaces
+                                                m.erase(std::remove_if(m.begin(), m.end(), [](unsigned char ch) { return std::isspace(ch); }), m.end());
+                                                std::ostringstream os;
+                                                bool first = true;
+                                                size_t start = 0;
+                                                while (start < m.size()) {
+                                                    size_t p = m.find('|', start);
+                                                    std::string tok = m.substr(start, p == std::string::npos ? std::string::npos : (p - start));
+                                                    std::string part = "std::ios::out";
+                                                    if (tok == "out") part = "std::ios::out";
+                                                    else if (tok == "in") part = "std::ios::in";
+                                                    else if (tok == "app") part = "std::ios::app";
+                                                    else if (tok == "binary") part = "std::ios::binary";
+                                                    else part = "std::ios::out";
+                                                    if (!first) os << " | ";
+                                                    os << part;
+                                                    first = false;
+                                                    if (p == std::string::npos) break;
+                                                    start = p + 1;
+                                                }
+                                                return os.str();
+                                            }
+
+                                            static std::string mkCheckpointLabel(const std::string& name) {
+                                                std::string lab = "__cp_label_" + name;
+                                                for (auto& c : lab) if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_') c = '_';
+                                                return lab;
+                                            }
+
+                                            static void emitScheduler(std::ostringstream& out, Node* scheduleNode) {
+                                                std::string pr = scheduleNode->value.empty() ? "0" : scheduleNode->value;
+                                                out << "{ struct __Task{int pr; std::function<void()> fn;}; std::vector<__Task> __sched;\n";
+                                                // Collect one block as one task; extendable to multiple
+                                                out << "__sched.push_back(__Task{" << pr << ", [=](){\n";
+                                                if (!scheduleNode->children.empty()) emitChildren(scheduleNode->children[0]->children, out);
+                                                out << "}});\n";
+                                                out << "std::sort(__sched.begin(), __sched.end(), [](const __Task&a,const __Task&b){return a.pr>b.pr;});\n";
+                                                out << "for (auto& t: __sched) t.fn(); }\n";
+                                            }
+
+                                            static void emitPrelude(std::ostringstream& out) {
+                                                out << "#include <iostream>\n";
+                                                out << "#include <fstream>\n";
+                                                out << "#include <cmath>\n";
+                                                out << "#include <vector>\n";
+                                                out << "#include <deque>\n";
+                                                out << "#include <mutex>\n";
+                                                out << "#include <condition_variable>\n";
+                                                out << "#include <functional>\n";
+                                                out << "#include <algorithm>\n";
+                                                out << "#include <chrono>\n"; // added for duration support
+                                                out << "#if defined(_OPENMP)\n#include <omp.h>\n#endif\n";
+                                                // Simple channel template
+                                                out << "template<typename T>\n";
+                                                out << "struct Channel {\n";
+                                                out << "  std::mutex m; std::condition_variable cv; std::deque<T> q;\n";
+                                                out << "  void send(const T& v){ std::lock_guard<std::mutex> lk(m); q.push_back(v); cv.notify_one(); }\n";
+                                                out << "  void recv(T& out){ std::unique_lock<std::mutex> lk(m); cv.wait(lk,[&]{return !q.empty();}); out = std::move(q.front()); q.pop_front(); }\n";
+                                                out << "};\n";
+                                                // Define default unknown duration unit alias
+                                                out << "using quantum_epochs = std::chrono::duration<double>;\n\n";
+                                            }
+
+                                            static void emitNode(Node* n, std::ostringstream& out) {
+                                                if (n->type == "Program") {
+                                                    emitPrelude(out);
+                                                    // Emit function definitions first
+                                                    for (auto* c : n->children)
+                                                        if (c->type == "Fn") emitNode(c, out);
+                                                    out << "int main(){\n";
+                                                    for (auto* c : n->children)
+                                                        if (c->type != "Fn") emitNode(c, out);
+                                                    out << "return 0;\n}\n";
+                                                }
+                                                else if (n->type == "Print") {
+                                                    if (!n->children.empty()) {
+                                                        emitPrintChain(out, n->children[0]);
+                                                    }
+                                                    else {
+                                                        out << "std::cout << \"" << escapeCppString(n->value) << "\" << std::endl;\n";
+                                                    }
+                                                }
+                                                else if (n->type == "Loop") {
+                                                    std::string header = n->value;
+                                                    out << "for(" << header << "){\n";
+                                                    if (!n->children.empty()) emitChildren(n->children[0]->children, out);
+                                                    out << "}\n";
+                                                }
+                                                else if (n->type == "While") {
+                                                    std::string cond = n->children[0]->children.empty() ? "true" : emitExpr(n->children[0]->children[0]);
+                                                    out << "while(" << cond << "){\n";
+                                                    if (n->children.size() > 1) emitChildren(n->children[1]->children, out);
+                                                    out << "}\n";
+                                                }
+                                                else if (n->type == "Break") {
+                                                    out << "break;\n";
+                                                }
+                                                else if (n->type == "Continue") {
+                                                    out << "continue;\n";
+                                                }
+                                                else if (n->type == "If") {
+                                                    std::string cond = "/* condition */";
+                                                    size_t bodyIdx = 0;
+                                                    if (!n->children.empty() && n->children[0]->type == "Cond") {
+                                                        cond = emitExpr(n->children[0]->children[0]);
+                                                        bodyIdx = 1;
+                                                    }
+                                                    out << "if(" << cond << "){\n";
+                                                    if (n->children.size() > bodyIdx) emitChildren(n->children[bodyIdx]->children, out);
+                                                    out << "}\n";
+                                                    if (n->children.size() > bodyIdx + 1) {
+                                                        out << "else{\n";
+                                                        emitChildren(n->children[bodyIdx + 1]->children, out);
+                                                        out << "}\n";
+                                                    }
+                                                }
+                                                else if (n->type == "Switch") {
+                                                    std::string cond = (n->children.empty() ? "0" : emitExpr(n->children[0]->children[0]));
+                                                    out << "switch(" << cond << "){\n";
+                                                    for (size_t i = 1; i < n->children.size(); ++i) {
+                                                        Node* c = n->children[i];
+                                                        if (c->type == "Case") {
+                                                            // Emit string constants with quotes; else raw
+                                                            bool isStr = false;
+                                                            if (!c->value.empty() && (c->value.find_first_not_of("0123456789.-") != std::string::npos)) isStr = true;
+                                                            out << "case " << (isStr ? ("/*id*/ " + c->value) : c->value) << ":\n";
+                                                            if (!c->children.empty()) emitChildren(c->children[0]->children, out);
+                                                            out << "break;\n";
+                                                        }
+                                                        else if (c->type == "Default") {
+                                                            out << "default:\n";
+                                                            if (!c->children.empty()) emitChildren(c->children[0]->children, out);
+                                                        }
+                                                    }
+                                                    out << "}\n";
+                                                }
+                                                else if (n->type == "Fn") {
+                                                    std::vector<std::string> overlays;
+                                                    Node* body = nullptr;
+                                                    for (auto* ch : n->children) {
+                                                        if (ch->type == "Overlay") overlays.push_back(ch->value);
+                                                        else if (ch->type == "Body") body = ch;
+                                                    }
+                                                    out << "void " << n->value << "(){\n";
+                                                    for (const auto& ov : overlays) {
+                                                        out << "/* overlay: " << ov << " */\n";
+                                                    }
+                                                    if (body) emitChildren(body->children, out);
+                                                    out << "}\n";
+                                                }
+                                                else if (n->type == "Call") {
+                                                    if (n->children.empty()) {
+                                                        out << n->value << "();\n";
+                                                    }
+                                                    else {
+                                                        out << n->value << "(";
+                                                        for (size_t i = 0; i < n->children.size(); ++i) {
+                                                            if (i) out << ", ";
+                                                            out << emitExpr(n->children[i]);
+                                                        }
+                                                        out << ");\n";
+                                                    }
+                                                }
+                                                else if (n->type == "Open") {
+                                                    std::string var = n->value;
+                                                    std::string path = (!n->children.empty() ? n->children[0]->value : "");
+                                                    std::string mode = (n->children.size() > 1 ? n->children[1]->value : "out");
+                                                    out << "std::fstream " << var << "(" << "\"" << escapeCppString(path) << "\"" << ", " << toIosMode(mode) << ");\n";
+                                                }
+                                                else if (n->type == "Write" || n->type == "Writeln") {
+                                                    std::string var = n->value;
+                                                    if (!n->children.empty()) {
+                                                        out << var << " << " << emitExpr(n->children[0]) << ";\n";
+                                                    }
+                                                    if (n->type == "Writeln") out << var << " << std::endl;\n";
+                                                }
+                                                else if (n->type == "Read") {
+                                                    std::string var = n->value;
+                                                    std::string target = (!n->children.empty() ? n->children[0]->value : "");
+                                                    out << var << " >> " << target << ";\n";
+                                                }
+                                                else if (n->type == "Close") {
+                                                    out << n->value << ".close();\n";
+                                                }
+                                                else if (n->type == "Let") {
+                                                    if (n->children.empty()) {
+                                                        out << "/* invalid let */\n";
+                                                    }
+                                                    else {
+                                                        out << "auto " << n->value << " = " << emitExpr(n->children[0]) << ";\n";
+                                                    }
+                                                }
+                                                else if (n->type == "Assign") {
+                                                    // children[0]=lhs, [1]=rhs (optional for ++/--)
+                                                    std::string lhs = emitExpr(n->children.empty() ? nullptr : n->children[0]);
+                                                    if (n->value == "++" || n->value == "--") {
+                                                        // Expand as compound assign by 1 to keep simple C++14 target
+                                                        out << lhs << (n->value == "++" ? " += 1" : " -= 1") << ";\n";
+                                                    }
+                                                    else {
+                                                        std::string rhs = emitExpr(n->children.size() > 1 ? n->children[1] : nullptr);
+                                                        out << lhs << " " << n->value << " " << rhs << ";\n";
+                                                    }
+                                                }
+                                                else if (n->type == "Ret") {
+                                                    if (n->children.empty()) out << "return;\n";
+                                                    else out << "return " << emitExpr(n->children[0]) << ";\n";
+                                                }
+                                                else if (n->type == "Mutate") {
+                                                    out << "/* mutation requested: " << n->value << " */\n";
+                                                }
+                                                else if (n->type == "Scale") {
+                                                    // children: [0]=Var x, [1]=a, [2]=b, [3]=c, [4]=d
+                                                    std::string x = n->children[0]->value;
+                                                    std::string a = emitExpr(n->children[1]);
+                                                    std::string b = emitExpr(n->children[2]);
+                                                    std::string c = emitExpr(n->children[3]);
+                                                    std::string d = emitExpr(n->children[4]);
+                                                    out << "{ auto __t = ((" << x << ") - (" << a << ")) / ((" << b << ") - (" << a << ")); "
+                                                        << x << " = (" << c << ") + __t * ((" << d << ") - (" << c << ")); }\n";
+                                                }
+                                                else if (n->type == "Bounds") {
+                                                    // children: [0]=Var x, [1]=min, [2]=max
+                                                    std::string x = n->children[0]->value;
+                                                    std::string mn = emitExpr(n->children[1]);
+                                                    std::string mx = emitExpr(n->children[2]);
+                                                    out << "if((" << x << ")<(" << mn << ")) " << x << "=(" << mn << ");\n";
+                                                    out << "if((" << x << ")>(" << mx << ")) " << x << "=(" << mx << ");\n";
+                                                }
+                                                else if (n->type == "Checkpoint") {
+                                                    out << mkCheckpointLabel(n->value) << ":\n";
+                                                }
+                                                else if (n->type == "VBreak") {
+                                                    out << "goto " << mkCheckpointLabel(n->value) << ";\n";
+                                                }
+                                                else if (n->type == "Channel") {
+                                                    // value=name, child[0]=type string (e.g., "int")
+                                                    std::string ty = n->children[0]->value;
+                                                    out << "Channel<" << ty << "> " << n->value << ";\n";
+                                                }
+                                                else if (n->type == "Send") {
+                                                    out << n->value << ".send(" << emitExpr(n->children[0]) << ");\n";
+                                                }
+                                                else if (n->type == "Recv") {
+                                                    out << n->value << ".recv(" << n->children[0]->value << ");\n";
+                                                }
+                                                else if (n->type == "Schedule") {
+                                                    emitScheduler(out, n);
+                                                }
+                                                else if (n->type == "Sync") {
+#if defined(_OPENMP)
+                                                    out << "#pragma omp barrier\n";
+#else
+                                                    out << "/* sync barrier (no-op) */\n";
+#endif
+                                                }
+                                                else if (n->type == "Input") {
+                                                    // read from stdin into a variable
+                                                    out << "std::cin >> " << n->value << ";\n";
+                                                }
+                                                else if (n->type == "Duration") {
+                                                    // Lower to std::chrono with default to quantum_epochs for unknown units
+                                                    std::string unit = (n->children.size() > 1 ? n->children[1]->value : "ms");
+                                                    std::string u = unit;
+                                                    std::transform(u.begin(), u.end(), u.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+                                                    const char* chronoUnit =
+                                                        (u == "ns" || u == "nanoseconds") ? "std::chrono::nanoseconds" :
+                                                        (u == "us" || u == "microseconds") ? "std::chrono::microseconds" :
+                                                        (u == "ms" || u == "milliseconds") ? "std::chrono::milliseconds" :
+                                                        (u == "s" || u == "sec" || u == "seconds") ? "std::chrono::seconds" :
+                                                        (u == "m" || u == "min" || u == "minutes") ? "std::chrono::minutes" :
+                                                        (u == "h" || u == "hour" || u == "hours") ? "std::chrono::hours" : "quantum_epochs";
+                                                    out << "{ using namespace std::chrono; auto __dur_val = " << emitExpr(n->children[0]) << "; "
+                                                        << "auto __dur = duration_cast<" << chronoUnit << ">(duration<double>(__dur_val)); "
+                                                        << "(void)__dur; }\n";
+                                                }
+                                                else if (n->type == "Derivative") {
+                                                    // Numeric forward difference: derivative <expr> wrt <var>
+                                                    if (n->children.size() >= 2 && n->children[1]->type == "Var") {
+                                                        const std::string var = n->children[1]->value;
+                                                        const std::string f = emitExpr(n->children[0]);
+                                                        out << "{ auto __eps = 1e-6; auto __orig = (" << var << "); "
+                                                            "auto __f0 = (double)(" << f << "); "
+                                                            << var << " = __orig + __eps; "
+                                                            "auto __f1 = (double)(" << f << "); "
+                                                            << var << " = __orig; "
+                                                            "double __deriv = (__f1 - __f0) / __eps; (void)__deriv; }\n";
+                                                    }
+                                                    else {
+                                                        out << "{ /* derivative missing 'wrt <var>' */ double __deriv = 0.0; (void)__deriv; }\n";
+                                                    }
+                                                }
+                                                else {
+                                                    out << "/* Unknown: " << n->type << " " << n->value << " */\n";
+                                                }
+                                            }
+
+                                            std::string emitCPP(Node* root) {
+                                                std::ostringstream out;
+                                                emitNode(root, out);
+                                                return out.str();
+                                            }
+
