@@ -15648,3 +15648,177 @@ else if (n->type == "Derivative") {
                                             // Insert just before:
                                             if (gOverlayNcurses) { out << "termui::shutdown();\n"; }
 
+                                            // [ADD] Overlay-driven feature flags (defined once for the whole TU)
+                                            static bool gOverlayNcurses = false;
+                                            static bool gOverlayThreads = false;
+                                            static bool gOverlayAutoscale = false;
+                                            static bool gOverlayCompress = false;
+                                            static bool gOverlayIndex = false;
+                                            static bool gOverlayChannelSpsc = false;
+                                            static bool gOverlayChannelMpmc = false;
+                                            static int  gPacketSize = 1;
+
+                                            // [REPLACE] collectOverlaysFlags with overlay feature collection mirroring
+                                            static void collectOverlaysFlags(Node* n) {
+                                                if (!n) return;
+                                                if (n->type == "Overlay") {
+                                                    std::string low = n->value;
+                                                    std::transform(low.begin(), low.end(), low.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+
+                                                    // existing toggles
+                                                    if (low == "mutate")  gEnableMutate = true;
+                                                    if (low == "inspect") gEnableInspect = true;
+                                                    if (low == "replay" || low == "audit") gEnableReplay = true;
+
+                                                    // terminal / ncurses
+                                                    if (low == "term" || low == "ncurses") gOverlayNcurses = true;
+
+                                                    // parallelism
+                                                    if (low == "threads" || low == "parallel" || low == "mt") gOverlayThreads = true;
+                                                    if (low == "autoscale") gOverlayAutoscale = true;
+
+                                                    // packetization: overlay packetNN (e.g., packet64)
+                                                    if (low.rfind("packet", 0) == 0 && low.size() > 6) {
+                                                        int v = 0;
+                                                        try { v = std::stoi(low.substr(6)); }
+                                                        catch (...) { v = 0; }
+                                                        if (v > 0) { gPacketSize = v; gOverlayThreads = true; }
+                                                    }
+
+                                                    // channels
+                                                    if (low == "channel_spsc") { gOverlayChannelSpsc = true; gOverlayChannelMpmc = false; }
+                                                    if (low == "channel_mpmc") { gOverlayChannelMpmc = true; gOverlayChannelSpsc = false; }
+
+                                                    // utilities
+                                                    if (low == "compress") gOverlayCompress = true;
+                                                    if (low == "index" || low == "indexer" || low == "indexing") gOverlayIndex = true;
+                                                }
+                                                if (n->type == "Mutate") gEnableMutate = true;
+                                                for (auto* c : n->children) collectOverlaysFlags(c);
+                                            }
+
+                                            // [REPLACE] emitPrelude in every variant with this body
+                                            static void emitPrelude(std::ostringstream& out) {
+                                                out << "#include <iostream>\n";
+                                                out << "#include <fstream>\n";
+                                                out << "#include <cmath>\n";
+                                                out << "#include <vector>\n";
+                                                out << "#include <deque>\n";
+                                                out << "#include <mutex>\n";
+                                                out << "#include <condition_variable>\n";
+                                                out << "#include <functional>\n";
+                                                out << "#include <algorithm>\n";
+                                                out << "#include <thread>\n";
+                                                out << "#include <atomic>\n";
+                                                out << "#include <queue>\n";
+                                                out << "#include <map>\n";
+                                                out << "#include <chrono>\n";
+                                                out << "#if defined(_OPENMP)\n#include <omp.h>\n#endif\n";
+                                                out << "#if defined(HAVE_NCURSES)\n#include <ncurses.h>\n#endif\n\n";
+
+                                                // Channel selection defines driven by overlays
+                                                if (gOverlayChannelSpsc) out << "#define CASE_CHANNEL_SPSC 1\n";
+                                                else if (gOverlayChannelMpmc) out << "#define CASE_CHANNEL_MPMC 1\n";
+
+                                                // Terminal helpers (guarded)
+                                                out << "namespace termui {\n";
+                                                out << "inline void init(){\n"
+                                                    "#if defined(HAVE_NCURSES)\n"
+                                                    "initscr(); noecho(); cbreak(); curs_set(0);\n"
+                                                    "#endif\n}\n";
+                                                out << "inline void shutdown(){\n"
+                                                    "#if defined(HAVE_NCURSES)\n"
+                                                    "endwin();\n"
+                                                    "#endif\n}\n}\n\n";
+
+                                                // Barrier
+                                                out << "struct Barrier{ std::mutex m; std::condition_variable cv; int total; int count=0; int gen=0; explicit Barrier(int n):total(n){}\n";
+                                                out << "void wait(){ std::unique_lock<std::mutex> lk(m); int g=gen; if(++count==total){ ++gen; count=0; cv.notify_all(); } else cv.wait(lk,[&]{return gen!=g;}); }};\n\n";
+
+                                                // SPSC channel
+                                                out << "template<typename T>\nclass SpscChannel{ std::vector<T> buf; std::atomic<size_t> head{0}, tail{0}; size_t cap; std::mutex m; std::condition_variable cv; \n";
+                                                out << "public: explicit SpscChannel(size_t c=1024):buf(c),cap(c){}\n";
+                                                out << "  void send(const T& v){ for(;;){ size_t t=tail.load(std::memory_order_relaxed), h=head.load(std::memory_order_acquire); if(((t+1)%cap)!=h){ buf[t]=v; tail.store((t+1)%cap,std::memory_order_release); cv.notify_one(); return; } std::unique_lock<std::mutex> lk(m); cv.wait_for(lk,std::chrono::milliseconds(1)); }}\n";
+                                                out << "  void recv(T& out){ for(;;){ size_t h=head.load(std::memory_order_relaxed), t=tail.load(std::memory_order_acquire); if(h!=t){ out=std::move(buf[h]); head.store((h+1)%cap,std::memory_order_release); return; } std::unique_lock<std::mutex> lk(m); cv.wait_for(lk,std::chrono::milliseconds(1)); }}\n";
+                                                out << "};\n";
+
+                                                // MPMC channel
+                                                out << "template<typename T>\nclass MpmcChannel{ std::mutex m; std::condition_variable cv; std::deque<T> q; \n";
+                                                out << "public: void send(const T& v){ std::lock_guard<std::mutex> lk(m); q.push_back(v); cv.notify_one(); }\n";
+                                                out << "  void recv(T& out){ std::unique_lock<std::mutex> lk(m); cv.wait(lk,[&]{return !q.empty();}); out=std::move(q.front()); q.pop_front(); }\n";
+                                                out << "};\n";
+
+                                                // Default Channel alias
+                                                out << "#if defined(CASE_CHANNEL_SPSC)\n";
+                                                out << "template<typename T> using Channel = SpscChannel<T>;\n";
+                                                out << "#elif defined(CASE_CHANNEL_MPMC)\n";
+                                                out << "template<typename T> using Channel = MpmcChannel<T>;\n";
+                                                out << "#else\n";
+                                                out << "template<typename T> using Channel = MpmcChannel<T>;\n";
+                                                out << "#endif\n\n";
+
+                                                // ThreadPool with auto-scaling + packetization
+                                                out << "class ThreadPool{ std::mutex m; std::condition_variable cv; std::deque<std::function<void()>> q; std::vector<std::thread> ws; std::atomic<bool> stop{false}; std::atomic<size_t> pkt{1}; bool autoscale=false; unsigned maxThr=0;\n";
+                                                out << "  void worker(){ for(;;){ std::function<void()> fn; { std::unique_lock<std::mutex> lk(m); cv.wait(lk,[&]{return stop||!q.empty();}); if(stop && q.empty()) return; fn=std::move(q.front()); q.pop_front(); }\n";
+                                                out << "    if(fn) fn(); if(autoscale){ std::lock_guard<std::mutex> lk(m); if(q.size()>ws.size()*4 && (maxThr==0 || ws.size()<maxThr)) ws.emplace_back([this]{worker();}); } } }\n";
+                                                out << "public:\n";
+                                                out << "  static ThreadPool& instance(){ static ThreadPool tp; return tp; }\n";
+                                                out << "  void configure(size_t packet,bool as,unsigned cap){ pkt.store(packet?packet:1); autoscale=as; maxThr=cap; if(ws.empty()){ unsigned n=std::thread::hardware_concurrency(); if(n==0) n=4; unsigned start = as? std::min<unsigned>(n, 8u) : n; for(unsigned i=0;i<start;i++) ws.emplace_back([this]{worker();}); } }\n";
+                                                out << "  template<class F> void enqueue(F&& f){ { std::lock_guard<std::mutex> lk(m); q.emplace_back(std::forward<F>(f)); } cv.notify_one(); }\n";
+                                                out << "  size_t packetSize() const { return pkt.load(); }\n";
+                                                out << "  ~ThreadPool(){ stop=true; cv.notify_all(); for(auto& t:ws) if(t.joinable()) t.join(); }\n";
+                                                out << "};\n\n";
+
+                                                // parallel_for helpers
+                                                out << "template<typename F>\n";
+                                                out << "void parallel_for(size_t begin,size_t end,F fn){ size_t n=(end>begin? end-begin:0); if(n==0) return; size_t packet=ThreadPool::instance().packetSize(); if(packet==0) packet=1; std::atomic<size_t> next{begin}; unsigned w=std::thread::hardware_concurrency(); if(w==0) w=4; Barrier bar((int)w);\n";
+                                                out << " for(unsigned t=0;t<w;++t){ ThreadPool::instance().enqueue([&next,begin,end,packet,fn,&bar]{ for(;;){ size_t i=next.fetch_add(packet); if(i>=end) break; size_t e=std::min(i+packet,end); for(size_t k=i;k<e;++k) fn(k); } bar.wait(); }); }\n";
+                                                out << "}\n\n";
+                                                out << "template<typename F>\n";
+                                                out << "void parallel_for_2d(size_t r0,size_t r1,size_t c0,size_t c1,F fn){ auto body=[&](size_t idx){ size_t R=r1-r0, C=c1-c0; size_t i=idx/C; size_t j=idx% C; fn(r0+i,c0+j); }; size_t N=(r1-r0)*(c1-c0); parallel_for(0,N,body); }\n\n";
+
+                                                // Boilerplate-reducing handle
+                                                out << "template<typename T>\nstruct Handle{ T value; std::function<void(T&)> dtor; Handle()=default; Handle(T v,std::function<void(T&)> d):value(std::move(v)),dtor(std::move(d)){} ~Handle(){ if(dtor) dtor(value);} T* operator->(){return &value;} T& get(){return value;} };\n\n";
+
+                                                // Utilities: RLE compression + Indexer
+                                                out << "namespace util{ inline std::string rle_compress(const std::string& s){ std::string o; o.reserve(s.size()); for(size_t i=0;i<s.size();){ char c=s[i]; size_t j=i+1; while(j<s.size() && s[j]==c && j-i<255) ++j; o.push_back(c); o.push_back(char(j-i)); i=j; } return o; }\n";
+                                                out << "inline std::string rle_decompress(const std::string& s){ std::string o; o.reserve(s.size()*2); for(size_t i=0;i+1<s.size();){ char c=s[i++]; unsigned char n=(unsigned char)s[i++]; o.append(n,c); } return o; }\n";
+                                                out << "struct Indexer{ std::map<std::string,int> m; std::vector<std::string> v; int intern(const std::string& s){ auto it=m.find(s); if(it!=m.end()) return it->second; int id=(int)v.size(); v.push_back(s); m.emplace(s,id); return id; } const std::string& str(int id) const { return v[id]; } };\n}\n\n";
+
+                                                out << "using quantum_epochs = std::chrono::duration<double>;\n\n";
+                                            }
+
+                                            // [REPLACE] emitScheduler in every variant with this body
+                                            static void emitScheduler(std::ostringstream& out, Node* scheduleNode) {
+                                                std::string pr = scheduleNode->value.empty() ? "0" : scheduleNode->value;
+
+                                                if (gOverlayThreads) {
+                                                    out << "{ /* scheduled pr=" << pr << " (threaded) */\n";
+                                                    out << "ThreadPool::instance().configure(" << (gPacketSize > 0 ? gPacketSize : 1) << ", "
+                                                        << (gOverlayAutoscale ? "true" : "false") << ", 0);\n";
+                                                    out << "ThreadPool::instance().enqueue([=](){\n";
+                                                    if (!scheduleNode->children.empty()) emitChildren(scheduleNode->children[0]->children, out);
+                                                    out << "});\n";
+                                                    out << "}\n";
+                                                    return;
+                                                }
+
+                                                // Baseline single-threaded path
+                                                out << "{ struct __Task{int pr; std::function<void()> fn;}; std::vector<__Task> __sched;\n";
+                                                out << "__sched.push_back(__Task{" << pr << ", [=](){\n";
+                                                if (!scheduleNode->children.empty()) emitChildren(scheduleNode->children[0]->children, out);
+                                                out << "}});\n";
+                                                out << "std::sort(__sched.begin(), __sched.end(), [](const __Task&a,const __Task&b){return a.pr>b.pr;});\n";
+                                                out << "for (auto& t: __sched) t.fn(); }\n";
+                                            }
+
+                                            // [EDIT] In every variant's Program emission inside emitNode(...)
+                                            // After: out << "int main(){\n";
+                                            if (gOverlayNcurses) { out << "termui::init();\n"; }
+                                            if (gOverlayThreads) {
+                                                out << "ThreadPool::instance().configure(" << (gPacketSize > 0 ? gPacketSize : 1) << ", "
+                                                    << (gOverlayAutoscale ? "true" : "false") << ", 0);\n";
+                                            }
+                                            // Before: out << "return 0;\n}\n";
+                                            if (gOverlayNcurses) { out << "termui::shutdown();\n"; }
+
