@@ -4246,3 +4246,4 @@ static Node* parseClass() {
     skipBracketBlockIfPresent();
     return cls;
 }
+
