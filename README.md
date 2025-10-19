@@ -1,3 +1,5 @@
+**USES C++14**
+
 🧠 C.A.S.E. — Compiler Assembler Strategic Execution 
 The Self-Hosting Symbolic Systems Language 
 ⚙️ Mission Statement 
