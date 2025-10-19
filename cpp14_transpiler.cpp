@@ -17,6 +17,7 @@
 #include <condition_variable>
 
 #include "intelligence.hpp" // CIAM preprocessor (write_stdout, overlays/inspect, sandbox/audit, base-12)
+#include "Transpiler.h"
 
 // Custom exception with manual location (C++14 compatible)
 class TranspilerError : public std::runtime_error {
@@ -25,8 +26,8 @@ public:
         : std::runtime_error(msg + (file.empty() ? "" : " at " + file + ":" + std::to_string(line))) {}
 };
 
-// Designated initializers not available in C++14, use constructors
-enum class TokenType { IDENT, STRING, NUMBER, KEYWORD, SYMBOL, END };
+// Extended TokenType for richer types
+enum class TokenType { IDENT, STRING, NUMBER, KEYWORD, SYMBOL, BOOL, STRUCT, DICT, LIST, END };
 
 struct Token {
     TokenType type;
@@ -35,12 +36,160 @@ struct Token {
     Token(TokenType t, const std::string& v, int l) : type(t), value(v), line(l) {}
 };
 
+// Enhanced Node with overlays field for tagging
 struct Node {
     std::string type;           // e.g., Program, Print, Let, Fn, While, ... Scale, Bounds, Checkpoint, VBreak, Channel, Send, Recv, Schedule, Sync
     std::string value;          // payload (e.g., name, operator, string literal, loop header, label, priority)
     std::vector<Node*> children;// generic children
+    std::unordered_map<std::string, std::string> overlays; // overlays can tag fields/states
     Node(const std::string& t, const std::string& v = "") : type(t), value(v) {}
 };
+
+// ------------------------ Deep Helpers ------------------------
+
+// Helper: Deep clone the entire AST
+static Node* deepCloneAST(Node* n) {
+    if (!n) return nullptr;
+    Node* clone = new Node(n->type, n->value);
+    clone->overlays = n->overlays; // Copy overlays
+    for (auto* child : n->children) {
+        clone->children.push_back(deepCloneAST(child));
+    }
+    return clone;
+}
+
+// Helper: Validate AST structure (basic checks)
+static bool validateAST(Node* n, std::string& error) {
+    if (!n) return true;
+    if (n->type == "Let" && n->children.size() != 1) {
+        error = "Let node must have exactly one child";
+        return false;
+    }
+    if (n->type == "BinOp" && n->children.size() != 2) {
+        error = "BinOp node must have exactly two children";
+        return false;
+    }
+    for (auto* child : n->children) {
+        if (!validateAST(child, error)) return false;
+    }
+    return true;
+}
+
+// Helper: Count nodes in AST
+static size_t countNodes(Node* n) {
+    if (!n) return 0;
+    size_t count = 1;
+    for (auto* child : n->children) {
+        count += countNodes(child);
+    }
+    return count;
+}
+
+// Helper: Find node by type (depth-first search)
+static Node* findNodeByType(Node* n, const std::string& type) {
+    if (!n) return nullptr;
+    if (n->type == type) return n;
+    for (auto* child : n->children) {
+        Node* found = findNodeByType(child, type);
+        if (found) return found;
+    }
+    return nullptr;
+}
+
+// Helper: Collect all nodes of a type
+static void collectNodesByType(Node* n, const std::string& type, std::vector<Node*>& result) {
+    if (!n) return;
+    if (n->type == type) result.push_back(n);
+    for (auto* child : n->children) {
+        collectNodesByType(child, type, result);
+    }
+}
+
+// Helper: Replace node in parent (assumes parent is known)
+static void replaceChild(Node* parent, Node* oldChild, Node* newChild) {
+    if (!parent) return;
+    for (size_t i = 0; i < parent->children.size(); ++i) {
+        if (parent->children[i] == oldChild) {
+            parent->children[i] = newChild;
+            return;
+        }
+    }
+}
+
+// Helper: Safe string to double conversion with error
+static bool safeToDouble(const std::string& s, double& out) {
+    try {
+        out = std::stod(s);
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+// Helper: Emit indented AST dump
+static void emitIndentedAST(std::ostringstream& os, Node* n, int indent = 0) {
+    if (!n) return;
+    for (int i = 0; i < indent; ++i) os << "  ";
+    os << n->type;
+    if (!n->value.empty()) os << "(" << n->value << ")";
+    if (!n->overlays.empty()) {
+        os << " [";
+        for (auto& ov : n->overlays) os << ov.first << ":" << ov.second << ",";
+        os << "]";
+    }
+    os << "\n";
+    for (auto* child : n->children) {
+        emitIndentedAST(os, child, indent + 1);
+    }
+}
+
+// Helper: Check if node is a leaf
+static bool isLeafNode(Node* n) {
+    return n && n->children.empty();
+}
+
+// Helper: Get all variable names in scope (from Let nodes)
+static std::unordered_set<std::string> getVariablesInScope(Node* n) {
+    std::unordered_set<std::string> vars;
+    if (!n) return vars;
+    if (n->type == "Let") vars.insert(n->value);
+    for (auto* child : n->children) {
+        auto childVars = getVariablesInScope(child);
+        vars.insert(childVars.begin(), childVars.end());
+    }
+    return vars;
+}
+
+// Helper: Simplify expression (basic constant folding)
+static Node* simplifyExpr(Node* expr) {
+    if (!expr) return nullptr;
+    if (expr->type == "BinOp" && expr->children.size() == 2) {
+        Node* left = simplifyExpr(expr->children[0]);
+        Node* right = simplifyExpr(expr->children[1]);
+        if (left->type == "Num" && right->type == "Num") {
+            double lval, rval;
+            if (safeToDouble(left->value, lval) && safeToDouble(right->value, rval)) {
+                double result = 0;
+                if (expr->value == "+") result = lval + rval;
+                else if (expr->value == "-") result = lval - rval;
+                else if (expr->value == "*") result = lval * rval;
+                else if (expr->value == "/" && rval != 0) result = lval / rval;
+                else return expr; // Cannot simplify
+                return new Node("Num", std::to_string(result));
+            }
+        }
+    }
+    return expr;
+}
+
+// Helper: Free AST memory (deep delete)
+static void freeAST(Node* n) {
+    if (!n) return;
+    for (auto* child : n->children) {
+        freeAST(child);
+    }
+    delete n;
+}
 
 // ------------------------ Lexer ------------------------
 
@@ -74,7 +223,7 @@ static bool isSymbolChar(char c) {
     case '|':
     case '%':
     case ':':
-    case '.':
+    case '.': // for dict key-value
         return true;
     default:
         return false;
@@ -174,7 +323,17 @@ std::vector<Token> tokenize(const std::string& src) {
             while (i < src.size() && isIdentChar(src[i])) ++i;
             std::string ident = src.substr(start, i - start);
             if (isKeyword(ident)) {
-                push(TokenType::KEYWORD, ident);
+                if (ident == "true" || ident == "false") {
+                    push(TokenType::BOOL, ident);
+                } else if (ident == "struct" || ident == "union") {
+                    push(TokenType::STRUCT, ident);
+                } else if (ident == "dict") {
+                    push(TokenType::DICT, ident);
+                } else if (ident == "list") {
+                    push(TokenType::LIST, ident);
+                } else {
+                    push(TokenType::KEYWORD, ident);
+                }
             }
             else {
                 push(TokenType::IDENT, ident);
@@ -632,6 +791,64 @@ static Node* parseSync() {
     return new Node("Sync", "");
 }
 
+// struct/union declaration: struct/union name { fields }
+static Node* parseStructUnion() {
+    std::string kind = advanceTok().value; // 'struct' or 'union'
+    Node* n = new Node(kind, "");
+    if (peek().type == TokenType::IDENT) {
+        n->value = advanceTok().value; // name
+    }
+    if (!matchValue("{")) throw TranspilerError("Expected '{' after " + kind, __FILE__, peek().line);
+    while (!checkValue("}") && peek().type != TokenType::END) {
+        if (peek().type == TokenType::IDENT) {
+            Node* field = new Node("Field", advanceTok().value);
+            if (peek().type == TokenType::IDENT) { // type
+                field->overlays["type"] = advanceTok().value;
+            }
+            n->children.push_back(field);
+            if (!matchValue(";")) throw TranspilerError("Expected ';' after field", __FILE__, peek().line);
+        } else {
+            advanceTok();
+        }
+    }
+    if (!matchValue("}")) throw TranspilerError("Expected '}' to close " + kind, __FILE__, peek().line);
+    return n;
+}
+
+// dict literal: { key: value, ... }
+static Node* parseDict() {
+    advanceTok(); // 'dict' or assume '{'
+    Node* n = new Node("Dict", "");
+    if (!matchValue("{")) throw TranspilerError("Expected '{' for dict", __FILE__, peek().line);
+    while (!checkValue("}") && peek().type != TokenType::END) {
+        Node* pair = new Node("Pair", "");
+        if (peek().type == TokenType::IDENT || peek().type == TokenType::STRING) {
+            pair->value = advanceTok().value; // key
+        }
+        if (!matchValue(":")) throw TranspilerError("Expected ':' in dict pair", __FILE__, peek().line);
+        Node* val = parseExpression();
+        if (val) pair->children.push_back(val);
+        n->children.push_back(pair);
+        if (!matchValue(",")) break;
+    }
+    if (!matchValue("}")) throw TranspilerError("Expected '}' to close dict", __FILE__, peek().line);
+    return n;
+}
+
+// list literal: [ expr, ... ]
+static Node* parseList() {
+    advanceTok(); // 'list' or assume '['
+    Node* n = new Node("List", "");
+    if (!matchValue("[")) throw TranspilerError("Expected '[' for list", __FILE__, peek().line);
+    while (!checkValue("]") && peek().type != TokenType::END) {
+        Node* elem = parseExpression();
+        if (elem) n->children.push_back(elem);
+        if (!matchValue(",")) break;
+    }
+    if (!matchValue("]")) throw TranspilerError("Expected ']' to close list", __FILE__, peek().line);
+    return n;
+}
+
 static Node* parseFn() {
     advanceTok(); // 'Fn'
     Node* n = new Node("Fn", "");
@@ -669,8 +886,17 @@ static Node* parsePrimary() {
     if (peek().type == TokenType::STRING) {
         return new Node("Str", advanceTok().value);
     }
+    if (peek().type == TokenType::BOOL) {
+        return new Node("Bool", advanceTok().value);
+    }
     if (peek().type == TokenType::IDENT) {
         return new Node("Var", advanceTok().value);
+    }
+    if (checkValue("{")) {
+        return parseDict();
+    }
+    if (checkValue("[")) {
+        return parseList();
     }
     if (checkValue("(")) {
         advanceTok(); // (
@@ -737,6 +963,9 @@ static Node* parseStatement() {
     if (v == "recv")     return parseRecv();
     if (v == "schedule") return parseSchedule();
     if (v == "sync")     return parseSync();
+    if (v == "struct" || v == "union") return parseStructUnion();
+    if (v == "dict")     return parseDict();
+    if (v == "list")     return parseList();
 
     // Unknown token - consume and produce placeholder node
     advanceTok();
@@ -755,12 +984,15 @@ Node* parseProgram(const std::vector<Token>& t) {
 
 // ------------------------ Simple Semantic Analyzer (type check) ------------------------
 
-enum class TypeKind { Unknown, Number, String };
+enum class TypeKind { Unknown, Number, String, Bool, Struct, Dict, List };
 
 static TypeKind inferExpr(Node* e, const std::vector<std::unordered_map<std::string, TypeKind>>& scopes) {
     if (!e) return TypeKind::Unknown;
     if (e->type == "Num") return TypeKind::Number;
     if (e->type == "Str") return TypeKind::String;
+    if (e->type == "Bool") return TypeKind::Bool;
+    if (e->type == "Dict") return TypeKind::Dict;
+    if (e->type == "List") return TypeKind::List;
     if (e->type == "Var") {
         for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
             auto f = it->find(e->value);
@@ -813,79 +1045,73 @@ static void analyze(Node* n, std::vector<std::unordered_map<std::string, TypeKin
 
 // ------------------------ Introspection & Plugin System ------------------------
 
-static bool gEnableInspect = false;
-static bool gEnableReplay = false;
-static bool gEnableMutate = false;
+static std::unordered_set<std::string> activeOverlays;
 
-// Snapshot buffer for symbolic replay
-struct Snapshot {
-    std::string phase;
-    std::string payload; // text or AST dump
-};
-static std::vector<Snapshot> gReplay;
-
-static void dumpIndent(std::ostringstream& os, int n) {
-    for (int i = 0; i < n; ++i) os << ' ';
-}
-
-static void dumpASTRec(Node* n, std::ostringstream& os, int depth) {
-    if (!n) return;
-    dumpIndent(os, depth);
-    os << n->type;
-    if (!n->value.empty()) os << "(" << n->value << ")";
-    os << "\n";
-    for (auto* c : n->children) dumpASTRec(c, os, depth + 2);
-}
-
-static std::string dumpAST(Node* root) {
-    std::ostringstream os;
-    dumpASTRec(root, os, 0);
-    return os.str();
-}
-
-using AstTransformFn = bool(*)(Node*& root, const char* passName);
-using AstSinkFn = void(*)(const char* phase, const Node* root);
-using TextSinkFn = void(*)(const char* phase, const char* text, size_t len);
-
-struct PluginRegistry {
-    std::vector<std::pair<std::string, AstTransformFn>> transforms;
-    std::vector<AstSinkFn> astSinks;
-    std::vector<TextSinkFn> textSinks;
-
-    void RegisterTransform(const std::string& name, AstTransformFn fn) {
+struct TransformRegistry {
+    std::vector<std::pair<std::string, bool(*)(Node*& root, const char* passName)>> transforms;
+    void Register(const std::string& name, bool(*fn)(Node*& root, const char* passName)) {
         transforms.emplace_back(name, fn);
     }
-    void RegisterAstSink(AstSinkFn fn) { astSinks.push_back(fn); }
-    void RegisterTextSink(TextSinkFn fn) { textSinks.push_back(fn); }
 };
 
-static PluginRegistry& Registry() {
-    static PluginRegistry R;
+struct SinkRegistry {
+    std::vector<std::pair<std::string, void(*)(const char* phase, const Node* root)>> astSinks;
+    std::vector<std::pair<std::string, void(*)(const char* phase, const char* text, size_t len)>> textSinks;
+    void RegisterAstSink(const std::string& name, void(*fn)(const char* phase, const Node* root)) {
+        astSinks.emplace_back(name, fn);
+    }
+    void RegisterTextSink(const std::string& name, void(*fn)(const char* phase, const char* text, size_t len)) {
+        textSinks.emplace_back(name, fn);
+    }
+};
+
+struct OverlayRegistry {
+    std::unordered_map<std::string, std::function<void(Node*)>> overlays;
+    void Register(const std::string& name, std::function<void(Node*)> fn) {
+        overlays[name] = fn;
+    }
+};
+
+static TransformRegistry& GetTransformRegistry() {
+    static TransformRegistry R;
     return R;
 }
 
-static void emitEventAst(const char* phase, Node* root) {
-    if (gEnableInspect || gEnableReplay) {
-        for (auto& s : Registry().astSinks) s(phase, root);
-    }
-    if (gEnableReplay) {
-        gReplay.push_back({ phase, dumpAST(root) });
-    }
+static SinkRegistry& GetSinkRegistry() {
+    static SinkRegistry R;
+    return R;
 }
 
-static void emitEventText(const char* phase, const std::string& text) {
-    if (gEnableInspect || gEnableReplay) {
-        for (auto& s : Registry().textSinks) s(phase, text.c_str(), text.size());
+static OverlayRegistry& GetOverlayRegistry() {
+    static OverlayRegistry R;
+    return R;
+}
+
+struct CeremonyPhase {
+    std::string name;
+    std::string payload;
+    std::vector<std::string> overlays;
+};
+
+static std::vector<CeremonyPhase> gReplay;
+
+static void emitEventAst(const char* phase, Node* root) {
+    for (auto& s : GetSinkRegistry().astSinks) s.second(phase, root);
+    if (activeOverlays.count("replay")) {
+        (phase, (root), std::vector<std::string>(activeOverlays.begin(), activeOverlays.end()));
+    };
     }
-    if (gEnableReplay) {
-        gReplay.push_back({ phase, text });
+
+
+static void emitEventText(const char* phase, const std::string& text) {
+    for (auto& s : GetSinkRegistry().textSinks) s.second(phase, text.c_str(), text.size());
+    if (activeOverlays.count("replay")) {
+        gReplay.push_back({ phase, text, std::vector<std::string>(activeOverlays.begin(), activeOverlays.end()) });
     }
 }
 
 static void runTransforms(const char* passPoint, Node*& root) {
-    if (!gEnableMutate) return;
-    for (auto& p : Registry().transforms) {
-        // Run all transforms; pass point allows plugin to branch internally if needed
+    for (auto& p : GetTransformRegistry().transforms) {
         if (p.second) {
             bool changed = p.second(root, passPoint);
             (void)changed;
@@ -921,12 +1147,9 @@ static bool mutateEvolve(Node*& root, const char* passPoint) {
 static void collectOverlaysFlags(Node* n) {
     if (!n) return;
     if (n->type == "Overlay") {
-        if (n->value == "mutate") gEnableMutate = true;
-        if (n->value == "inspect") gEnableInspect = true;
-        if (n->value == "replay") gEnableReplay = true;
-        if (n->value == "audit") gEnableInspect = true;
+        activeOverlays.insert(n->value);
     }
-    if (n->type == "Mutate") gEnableMutate = true;
+    if (n->type == "Mutate") activeOverlays.insert("mutate");
     for (auto* c : n->children) collectOverlaysFlags(c);
 }
 
@@ -935,9 +1158,14 @@ static void initPluginsOnce() {
     if (inited) return;
     inited = true;
     // Register built-ins
-    Registry().RegisterAstSink(&builtinAstSink);
-    Registry().RegisterTextSink(&builtinTextSink);
-    Registry().RegisterTransform("mutate-evolve", &mutateEvolve);
+    GetSinkRegistry().RegisterAstSink("builtin", &builtinAstSink);
+    GetSinkRegistry().RegisterTextSink("builtin", &builtinTextSink);
+    GetTransformRegistry().Register("mutate-evolve", &mutateEvolve);
+    // Example overlay registration
+    GetOverlayRegistry().Register("audit", [](Node* root) {
+        // Custom AST dump for audit
+        
+    });
 }
 
 // ------------------------ Optimizer (constant fold, DCE, peephole) ------------------------
@@ -956,6 +1184,7 @@ static Node* makeNum(double v) {
 static Node* clone(Node* n) {
     if (!n) return nullptr;
     Node* c = new Node(n->type, n->value);
+    c->overlays = n->overlays; // Copy overlays
     for (auto* ch : n->children) c->children.push_back(clone(ch));
     return c;
 }
@@ -1068,6 +1297,7 @@ static std::string emitExpr(Node* e) {
         ss << "\"" << escapeCppString(e->value) << "\"";
         return ss.str();
     }
+    if (e->type == "Bool") return e->value;
     if (e->type == "BinOp") {
         std::string lhs = emitExpr(e->children.size() > 0 ? e->children[0] : nullptr);
         std::string rhs = emitExpr(e->children.size() > 1 ? e->children[1] : nullptr);
@@ -1169,6 +1399,7 @@ static void emitPrelude(std::ostringstream& out) {
     out << "#include <thread>\n";
     out << "#include <future>\n";
     out << "#include <map>\n";
+    out << "#include <unordered_map>\n";
     out << "#if defined(_OPENMP)\n#include <omp.h>\n#endif\n";
     // Simple channel template
     out << "template<typename T>\n";
@@ -1357,6 +1588,31 @@ static void emitNode(Node* n, std::ostringstream& out) {
         out << "/* sync barrier (no-op) */\n";
 #endif
     }
+    else if (n->type == "struct" || n->type == "union") {
+        out << n->type << " " << n->value << " {\n";
+        for (auto* f : n->children) {
+            if (f->type == "Field") {
+                out << "  " << f->overlays["type"] << " " << f->value << ";\n";
+            }
+        }
+        out << "};\n";
+    }
+    else if (n->type == "Dict") {
+        out << "std::unordered_map<std::string, auto> " << n->value << " = {\n";
+        for (auto* p : n->children) {
+            if (p->type == "Pair") {
+                out << "  {\"" << p->value << "\", " << emitExpr(p->children[0]) << "},\n";
+            }
+        }
+        out << "};\n";
+    }
+    else if (n->type == "List") {
+        out << "std::vector<auto> " << n->value << " = {\n";
+        for (auto* e : n->children) {
+            out << "  " << emitExpr(e) << ",\n";
+        }
+        out << "};\n";
+    }
     else {
         out << "/* Unknown: " << n->type << " " << n->value << " */\n";
     }
@@ -1365,6 +1621,39 @@ static void emitNode(Node* n, std::ostringstream& out) {
 std::string emitCPP(Node* root) {
     std::ostringstream out;
     emitNode(root, out);
+    return out.str();
+}
+
+// ------------------------ Opcodes Emitter ------------------------
+
+enum class Opcode { LOAD, ADD, SUB, MUL, DIV, CALL, RET, JUMP, LABEL };
+
+static void emitOpcodesRec(Node* n, std::ostringstream& out, const std::vector<std::string>& overlays) {
+    if (!n) return;
+    std::string overlayStr = overlays.empty() ? "" : "[" + overlays[0] + "]";
+    if (n->type == "Let") {
+        out << "// " << overlayStr << " LOAD " << n->value << "\n";
+    } else if (n->type == "BinOp") {
+        if (n->value == "+") out << "// " << overlayStr << " ADD\n";
+        else if (n->value == "-") out << "// " << overlayStr << " SUB\n";
+        else if (n->value == "*") out << "// " << overlayStr << " MUL\n";
+        else if (n->value == "/") out << "// " << overlayStr << " DIV\n";
+    } else if (n->type == "Call") {
+        out << "// " << overlayStr << " CALL " << n->value << "\n";
+    } else if (n->type == "Ret") {
+        out << "// " << overlayStr << " RET\n";
+    } else if (n->type == "Checkpoint") {
+        out << "// " << overlayStr << " LABEL " << n->value << "\n";
+    } else if (n->type == "VBreak") {
+        out << "// " << overlayStr << " JUMP " << n->value << "\n";
+    }
+    for (auto* c : n->children) emitOpcodesRec(c, out, overlays);
+}
+
+std::string emitOpcodes(Node* root) {
+    std::ostringstream out;
+    std::vector<std::string> overlays(activeOverlays.begin(), activeOverlays.end());
+    emitOpcodesRec(root, out, overlays);
     return out.str();
 }
 
@@ -1403,7 +1692,7 @@ int main(int argc, char** argv) {
 
         // Parse
         Node* ast = parseProgram(tokens);
-        emitEventAst("parsed", ast);
+        
 
         // Collect overlays to enable CIAM-like behaviors
         collectOverlaysFlags(ast);
@@ -1411,22 +1700,26 @@ int main(int argc, char** argv) {
         // Analyze types
         std::vector<std::unordered_map<std::string, TypeKind>> scopes;
         analyze(ast, scopes);
-        emitEventAst("analyzed", ast);
+       
 
         // Plugin transforms before optimize
         runTransforms("before-opt", ast);
 
         // Optimize
         optimize(ast);
-        emitEventAst("optimized", ast);
+        
 
         // Plugin transforms after optimize
         runTransforms("after-opt", ast);
 
         // Emit C++
-        emitEventAst("before-emit", ast);
+       
         std::string cpp = emitCPP(ast);
         emitEventText("emitted-cpp", cpp);
+
+        // Emit Opcodes
+        std::string opcodes = emitOpcodes(ast);
+        emitEventText("emitted-opcodes", opcodes);
 
         std::ofstream out("compiler.cpp", std::ios::binary);
         if (!out) {
@@ -1437,11 +1730,16 @@ int main(int argc, char** argv) {
         std::cout << "[OK] Generated compiler.cpp\n";
 
         // Write symbolic replay if enabled
-        if (gEnableReplay) {
+        if (activeOverlays.count("replay")) {
             std::ofstream replay("replay.txt", std::ios::binary);
             if (replay) {
                 for (auto& s : gReplay) {
-                    replay << "=== " << s.phase << " ===\n";
+                    replay << "=== " << s.name << " [";
+                    for (size_t i = 0; i < s.overlays.size(); ++i) {
+                        if (i) replay << ", ";
+                        replay << s.overlays[i];
+                    }
+                    replay << "] ===\n";
                     replay << s.payload << "\n";
                 }
                 std::cout << "[OK] Wrote symbolic replay to replay.txt\n";
@@ -1451,7 +1749,7 @@ int main(int argc, char** argv) {
             }
         }
     }
-    catch (const TranspilerError& e) {  // C++20: custom exception with source_location
+    catch ( const TranspilerError& e) {  // C++20: custom exception with source_location
         std::cerr << "[DEEP ERROR] " << e.what() << "\n";
         if (std::string(e.what()).find("unterminated") != std::string::npos) {
             std::cerr << "[SUGGESTION] Add [end] to close block.\n";
