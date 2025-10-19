@@ -7,6 +7,7 @@
 #include <cctype>
 #include <iomanip>
 #include <memory>
+#include <algorithm>  // Add this for std::sort
 
 enum class TokenType {
     Keyword, Identifier, Number, String, Operator, Symbol, Comment,
@@ -535,6 +536,253 @@ struct VarDecl : Stmt {
 };
 
 // -----------------------------------------------------------------------------
+// INTERMEDIATE REPRESENTATION (IR) NODES
+// ----------------------------------------------------------------------------
+
+enum class IROpCode {
+    // Arithmetic
+    Add, Sub, Mul, Div, Mod,
+    // Comparison
+    Eq, Neq, Lt, Gt, Lte, Gte,
+    // Logical
+    And, Or, Not,
+    // Memory operations
+    Load, Store, Alloca,
+    // Control flow
+    Label, Jump, JumpIf, JumpIfNot, Call, Return,
+    // I/O
+    Print, Read,
+    // Special
+    Nop, Phi
+};
+
+static std::string opCodeToString(IROpCode op) {
+    switch (op) {
+        case IROpCode::Add: return "ADD";
+        case IROpCode::Sub: return "SUB";
+        case IROpCode::Mul: return "MUL";
+        case IROpCode::Div: return "DIV";
+        case IROpCode::Mod: return "MOD";
+        case IROpCode::Eq:  return "EQ";
+        case IROpCode::Neq: return "NEQ";
+        case IROpCode::Lt:  return "LT";
+        case IROpCode::Gt:  return "GT";
+        case IROpCode::Lte: return "LTE";
+        case IROpCode::Gte: return "GTE";
+        case IROpCode::And: return "AND";
+        case IROpCode::Or:  return "OR";
+        case IROpCode::Not: return "NOT";
+        case IROpCode::Load: return "LOAD";
+        case IROpCode::Store: return "STORE";
+        case IROpCode::Alloca: return "ALLOCA";
+        case IROpCode::Label: return "LABEL";
+        case IROpCode::Jump: return "JUMP";
+        case IROpCode::JumpIf: return "JUMP_IF";
+        case IROpCode::JumpIfNot: return "JUMP_IF_NOT";
+        case IROpCode::Call: return "CALL";
+        case IROpCode::Return: return "RETURN";
+        case IROpCode::Print: return "PRINT";
+        case IROpCode::Read: return "READ";
+        case IROpCode::Nop: return "NOP";
+        case IROpCode::Phi: return "PHI";
+        default: return "UNKNOWN";
+    }
+}
+
+struct IRInstruction {
+    IROpCode opcode;
+    std::string result;      // Destination register/variable
+    std::string operand1;    // First operand
+    std::string operand2;    // Second operand (optional)
+    std::string type;        // Type information
+    int line;                // Source line number
+
+    IRInstruction(IROpCode op, const std::string& res = "", 
+                  const std::string& op1 = "", const std::string& op2 = "",
+                  const std::string& t = "int", int l = 0)
+        : opcode(op), result(res), operand1(op1), operand2(op2), type(t), line(l) {}
+
+    void print() const {
+        std::cout << "  " << std::setw(15) << std::left << opCodeToString(opcode);
+        if (!result.empty()) {
+            std::cout << result << " = ";
+        }
+        if (!operand1.empty()) {
+            std::cout << operand1;
+        }
+        if (!operand2.empty()) {
+            std::cout << ", " << operand2;
+        }
+        if (!type.empty() && type != "int") {
+            std::cout << " (" << type << ")";
+        }
+        std::cout << "\n";
+    }
+};
+
+class IRModule {
+public:
+    void addInstruction(const IRInstruction& instr) {
+        instructions.push_back(instr);
+    }
+
+    void addFunction(const std::string& name) {
+        currentFunction = name;
+        addInstruction(IRInstruction(IROpCode::Label, name));
+    }
+
+    void print() const {
+        std::cout << "\n\033[1;36m=== IR Code ===\033[0m\n";
+        for (const auto& instr : instructions) {
+            instr.print();
+        }
+    }
+
+    const std::vector<IRInstruction>& getInstructions() const {
+        return instructions;
+    }
+
+    void optimize() {
+        // Simple dead code elimination
+        std::cout << "\n\033[1;33m[IR] Running optimizations...\033[0m\n";
+        // Placeholder for optimization passes
+    }
+
+private:
+    std::vector<IRInstruction> instructions;
+    std::string currentFunction;
+};
+
+// -----------------------------------------------------------------------------
+// IR GENERATOR
+// -----------------------------------------------------------------------------
+
+class IRGenerator {
+public:
+    IRGenerator() : tempCounter(0), labelCounter(0) {}
+
+    IRModule generate(NodePtr ast) {
+        module = IRModule();
+        generateStmt(ast);
+        return module;
+    }
+
+private:
+    IRModule module;
+    int tempCounter;
+    int labelCounter;
+
+    std::string newTemp() {
+        return "%t" + std::to_string(tempCounter++);
+    }
+
+    std::string newLabel() {
+        return ".L" + std::to_string(labelCounter++);
+    }
+
+    std::string generateExpr(NodePtr expr) {
+        if (auto lit = std::dynamic_pointer_cast<Literal>(expr)) {
+            return lit->value;
+        }
+        else if (auto id = std::dynamic_pointer_cast<Identifier>(expr)) {
+            std::string temp = newTemp();
+            module.addInstruction(IRInstruction(IROpCode::Load, temp, id->name));
+            return temp;
+        }
+        else if (auto bin = std::dynamic_pointer_cast<BinaryExpr>(expr)) {
+            std::string left = generateExpr(bin->left);
+            std::string right = generateExpr(bin->right);
+            std::string temp = newTemp();
+
+            IROpCode op = IROpCode::Nop;
+            if (bin->op == "+") op = IROpCode::Add;
+            else if (bin->op == "-") op = IROpCode::Sub;
+            else if (bin->op == "*") op = IROpCode::Mul;
+            else if (bin->op == "/") op = IROpCode::Div;
+            else if (bin->op == "%") op = IROpCode::Mod;
+            else if (bin->op == "==") op = IROpCode::Eq;
+            else if (bin->op == "!=") op = IROpCode::Neq;
+            else if (bin->op == "<") op = IROpCode::Lt;
+            else if (bin->op == ">") op = IROpCode::Gt;
+            else if (bin->op == "<=") op = IROpCode::Lte;
+            else if (bin->op == ">=") op = IROpCode::Gte;
+            else if (bin->op == "&&") op = IROpCode::And;
+            else if (bin->op == "||") op = IROpCode::Or;
+
+            module.addInstruction(IRInstruction(op, temp, left, right));
+            return temp;
+        }
+        else if (auto call = std::dynamic_pointer_cast<CallExpr>(expr)) {
+            std::string temp = newTemp();
+            module.addInstruction(IRInstruction(IROpCode::Call, temp, call->callee));
+            return temp;
+        }
+
+        return "";
+    }
+
+    void generateStmt(NodePtr stmt) {
+        if (auto block = std::dynamic_pointer_cast<Block>(stmt)) {
+            for (auto& s : block->statements) {
+                generateStmt(s);
+            }
+        }
+        else if (auto fn = std::dynamic_pointer_cast<FunctionDecl>(stmt)) {
+            module.addFunction(fn->name);
+            generateStmt(fn->body);
+            module.addInstruction(IRInstruction(IROpCode::Return, "", "0"));
+        }
+        else if (auto varDecl = std::dynamic_pointer_cast<VarDecl>(stmt)) {
+            module.addInstruction(IRInstruction(IROpCode::Alloca, varDecl->name, "", "", varDecl->type));
+            if (varDecl->initializer) {
+                std::string value = generateExpr(varDecl->initializer);
+                module.addInstruction(IRInstruction(IROpCode::Store, varDecl->name, value));
+            }
+        }
+        else if (auto printStmt = std::dynamic_pointer_cast<PrintStmt>(stmt)) {
+            std::string value = generateExpr(printStmt->expr);
+            module.addInstruction(IRInstruction(IROpCode::Print, "", value));
+        }
+        else if (auto ifStmt = std::dynamic_pointer_cast<IfStmt>(stmt)) {
+            std::string cond = generateExpr(ifStmt->condition);
+            std::string labelThen = newLabel();
+            std::string labelElse = newLabel();
+            std::string labelEnd = newLabel();
+
+            module.addInstruction(IRInstruction(IROpCode::JumpIfNot, labelElse, cond));
+            
+            module.addInstruction(IRInstruction(IROpCode::Label, labelThen));
+            generateStmt(ifStmt->thenBlock);
+            module.addInstruction(IRInstruction(IROpCode::Jump, labelEnd));
+
+            module.addInstruction(IRInstruction(IROpCode::Label, labelElse));
+            if (ifStmt->elseBlock) {
+                generateStmt(ifStmt->elseBlock);
+            }
+
+            module.addInstruction(IRInstruction(IROpCode::Label, labelEnd));
+        }
+        else if (auto loop = std::dynamic_pointer_cast<LoopStmt>(stmt)) {
+            std::string labelStart = newLabel();
+            std::string labelEnd = newLabel();
+
+            module.addInstruction(IRInstruction(IROpCode::Label, labelStart));
+            generateStmt(loop->block);
+            module.addInstruction(IRInstruction(IROpCode::Jump, labelStart));
+            module.addInstruction(IRInstruction(IROpCode::Label, labelEnd));
+        }
+        else if (auto ret = std::dynamic_pointer_cast<ReturnStmt>(stmt)) {
+            if (ret->value) {
+                std::string value = generateExpr(ret->value);
+                module.addInstruction(IRInstruction(IROpCode::Return, "", value));
+            } else {
+                module.addInstruction(IRInstruction(IROpCode::Return, "", "0"));
+            }
+        }
+    }
+};
+
+// -----------------------------------------------------------------------------
 // PARSER
 // -----------------------------------------------------------------------------
 
@@ -688,7 +936,6 @@ private:
     void analyzeStmt(NodePtr stmt);
     void analyzeExpr(NodePtr expr, std::string& type);
     
-    // Enhanced error reporting methods
     void reportError(const std::string& msg, int line = -1, int column = -1);
     void reportWarning(const std::string& msg, int line = -1, int column = -1);
     void reportUndefinedVariable(const std::string& varName, int line = -1, int column = -1);
@@ -696,7 +943,6 @@ private:
     void reportTypeMismatch(const std::string& expected, const std::string& actual, int line = -1);
     void reportUninitializedUse(const std::string& varName, int line = -1);
     
-    // Fuzzy matching for suggestions
     std::vector<std::string> getSimilarIdentifiers(const std::string& name) const;
     int levenshteinDistance(const std::string& s1, const std::string& s2) const;
 };
@@ -763,18 +1009,25 @@ int SemanticAnalyzer::levenshteinDistance(const std::string& s1, const std::stri
 // Find similar identifiers using fuzzy matching
 std::vector<std::string> SemanticAnalyzer::getSimilarIdentifiers(const std::string& name) const {
     std::vector<std::pair<std::string, int>> candidates;
+    auto allSymbols = symTable.getAllSymbolNames();
     
-    // Get all symbols from symbol table
-    // This requires adding a method to SymbolTable to get all symbol names
-    // For now, we'll use a simplified version
+    const int MAX_DISTANCE = 3;
+    
+    for (const auto& symbol : allSymbols) {
+        int distance = levenshteinDistance(name, symbol);
+        if (distance <= MAX_DISTANCE) {
+            candidates.push_back({symbol, distance});
+        }
+    }
+    
+    // Sort by distance
+    std::sort(candidates.begin(), candidates.end(),
+              [](const auto& a, const auto& b) { return a.second < b.second; });
     
     std::vector<std::string> suggestions;
-    const int MAX_DISTANCE = 3; // Maximum edit distance for suggestions
-    
-    // You would iterate through all symbols in the symbol table here
-    // For demonstration, this is a placeholder
-    // In a real implementation, you'd need to add a method to SymbolTable
-    // to retrieve all current symbol names
+    for (const auto& candidate : candidates) {
+        suggestions.push_back(candidate.first);
+    }
     
     return suggestions;
 }
@@ -849,7 +1102,7 @@ void SemanticAnalyzer::analyzeStmt(NodePtr stmt) {
         if (symTable.lookupWithInfo(fn->name, existing)) {
             reportRedeclaration(fn->name, existing);
         } else {
-            symTable.declare(fn->name, "function", 0, 0);
+            symTable.declare(fn->name, "function", 0, 0, SymbolKind::Function);
         }
         symTable.enterScope();
         analyzeBlock(*std::static_pointer_cast<Block>(fn->body));
@@ -900,17 +1153,18 @@ void SemanticAnalyzer::analyzeExpr(NodePtr expr, std::string& type) {
         } else if (!lit->value.empty()) {
             type = "int";
         } else {
-            type = "string"; // Empty literal is treated as string
+            type = "string";
         }
     } 
     else if (auto id = std::dynamic_pointer_cast<Identifier>(expr)) {
         if (!symTable.lookup(id->name, type)) {
             reportUndefinedVariable(id->name);
             type = "unknown";
-        } else if (!symTable.isInitialized(id->name)) {
-            reportUninitializedUse(id->name);
-            // Still return the type even if uninitialized
-            symTable.lookup(id->name, type);
+        } else {
+            symTable.markUsed(id->name);
+            if (!symTable.isInitialized(id->name)) {
+                reportUninitializedUse(id->name);
+            }
         }
     } 
     else if (auto bin = std::dynamic_pointer_cast<BinaryExpr>(expr)) {
@@ -923,10 +1177,9 @@ void SemanticAnalyzer::analyzeExpr(NodePtr expr, std::string& type) {
         }
         
         if (bin->op == "+" || bin->op == "-" || bin->op == "*" || bin->op == "/") {
-            // Arithmetic operators
             if (leftType == "string" || rightType == "string") {
                 if (bin->op == "+") {
-                    type = "string"; // String concatenation
+                    type = "string";
                 } else {
                     reportError("Cannot perform arithmetic operation on strings");
                     type = "unknown";
@@ -936,10 +1189,8 @@ void SemanticAnalyzer::analyzeExpr(NodePtr expr, std::string& type) {
             }
         } else if (bin->op == "==" || bin->op == "!=" || bin->op == "<" || 
                    bin->op == ">" || bin->op == "<=" || bin->op == ">=") {
-            // Comparison operators
             type = "bool";
         } else if (bin->op == "&&" || bin->op == "||") {
-            // Logical operators
             if (leftType != "bool" && leftType != "unknown") {
                 reportError("Logical operator requires boolean operands, got '" + leftType + "'");
             }
@@ -979,7 +1230,7 @@ int main(int argc, char** argv) {
         for (const auto& t : tokens) {
             std::cout << std::setw(5) << t.line << ":" << std::setw(3) << t.column << " | "
                 << std::left << std::setw(12) << tokenTypeToString(t.type)
-                << R"( -> ")" << t.lexeme << "\"\n";
+                << " -> \"" << t.lexeme << "\"\n";
         }
 
         Parser parser(tokens);
@@ -991,9 +1242,9 @@ int main(int argc, char** argv) {
         SymbolTable symTable;
         SemanticAnalyzer analyzer(symTable);
         analyzer.analyze(tree);
-
-        // Print symbol table for debugging
-        symTable.printSymbolTable();
+        
+        // Print error summary
+        analyzer.printErrorSummary();
 
         if (analyzer.hasErrors()) {
             std::cerr << "\n\033[1;31m=== Semantic Analysis Failed ===\033[0m\n";
@@ -1002,48 +1253,20 @@ int main(int argc, char** argv) {
         }
 
         std::cout << "\n\033[1;32m=== Semantic Analysis Complete ===\033[0m\n";
+
+        // Generate IR
+        IRGenerator irGen;
+        IRModule irModule = irGen.generate(tree);
+        irModule.print();
+
+        // Optional: Run IR optimizations
+        irModule.optimize();
+
         return 0;
     }
     catch (const std::exception& e) {
         std::cerr << "\033[1;31m[Error]\033[0m " << e.what() << "\n";
         return 1;
     }
-}
-
-// -----------------------------------------------------------------------------
-// DRIVER
-// ----------------------------------------------------------------------------
-
-int main_driver() {
-    std::string code = R"(
-        Fn main() {
-            let x = 5 + 3 * 2;
-            Print x;
-            if (x > 5) {
-                Print "Greater";
-            } else {
-                loop { Print "Looping"; }
-            }
-        }
-    )";
-
-    Lexer lexer(code);
-    auto tokens = lexer.tokenize();
-
-    Parser parser(tokens);
-    NodePtr tree = parser.parse();
-
-    std::cout << "\n\033[1;36m=== AST ===\033[0m\n";
-    tree->print();
-
-    SymbolTable symTable;
-    SemanticAnalyzer analyzer(symTable);
-    analyzer.analyze(tree);
-
-    symTable.printSymbolTable();
-
-    std::cout << "\n\033[1;32m=== Semantic Analysis Complete ===\033[0m\n";
-
-    return 0;
 }
 
