@@ -626,3 +626,8 @@ And so on…
 Type system note: CIAM bodies and expander are intentionally permissive about value types; if you want strict typing the expander can accept a CIAM signature (e.g., CIAM sinValue(arg:double)) and use it to emit Fn sinValue "double arg" with exact types. 
 
 
+# Run transpiler normally
+./transpiler.exe mycode.case
+
+# Run Astro Lake simulation
+./transpiler.exe --astro-sim
