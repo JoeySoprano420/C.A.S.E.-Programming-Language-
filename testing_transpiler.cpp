@@ -462,6 +462,35 @@ static std::string readFile(const std::string& path) {
     return content;
 }
 
+static std::vector<std::string> splitString(const std::string& str, char delimiter) {
+    std::vector<std::string> parts;
+    std::string current;
+
+    for (char c : str) {
+        if (c == delimiter) {
+            if (!current.empty()) {
+                parts.push_back(current);
+                current.clear();
+            }
+        } else {
+            current += c;
+        }
+    }
+
+    if (!current.empty()) {
+        parts.push_back(current);
+    }
+
+    return parts;
+}
+
+static std::string trim(const std::string& str) {
+    size_t start = str.find_first_not_of(" \t\r\n");
+    if (start == std::string::npos) return "";
+    size_t end = str.find_last_not_of(" \t\r\n");
+    return str.substr(start, end - start + 1);
+}
+
 // -----------------------------------------------------------------------------
 // AST NODES
 // ----------------------------------------------------------------------------
@@ -476,7 +505,40 @@ struct Stmt : Node {};
 struct Block : Node { std::vector<NodePtr> statements; void print(int d = 0) const override; };
 struct PrintStmt : Stmt { NodePtr expr; void print(int d = 0) const override; };
 struct IfStmt : Stmt { NodePtr condition, thenBlock, elseBlock; void print(int d = 0) const override; };
-struct LoopStmt : Stmt { NodePtr block; void print(int d = 0) const override; };
+struct LoopStmt : Stmt {
+    // Enhanced loop with init, condition, increment
+    NodePtr init;           // Initialization statement (e.g., let i = 0)
+    NodePtr condition;      // Loop condition (e.g., i < 10)
+    NodePtr increment;      // Increment statement (e.g, i++)
+    NodePtr block;          // Loop body
+    std::string ceremonyHeader; // Original header for CIAM replay
+    
+    void print(int d = 0) const override {
+        indent(d); 
+        std::cout << "LoopStmt";
+        if (!ceremonyHeader.empty()) {
+            std::cout << " [" << ceremonyHeader << "]";
+        }
+        std::cout << "\n";
+        
+        if (init) {
+            indent(d + 1); std::cout << "Init:\n";
+            init->print(d + 2);
+        }
+        if (condition) {
+            indent(d + 1); std::cout << "Condition:\n";
+            condition->print(d + 2);
+        }
+        if (increment) {
+            indent(d + 1); std::cout << "Increment:\n";
+            increment->print(d + 2);
+        }
+        if (block) {
+            indent(d + 1); std::cout << "Body:\n";
+            block->print(d + 2);
+        }
+    }
+};
 struct FunctionDecl : Stmt { std::string name; NodePtr body; void print(int d = 0) const override; };
 struct Literal : Expr { std::string value; void print(int d = 0) const override; };
 struct Identifier : Expr { std::string name; void print(int d = 0) const override; };
@@ -769,10 +831,39 @@ private:
         else if (auto loop = std::dynamic_pointer_cast<LoopStmt>(stmt)) {
             std::string labelStart = newLabel();
             std::string labelEnd = newLabel();
+            std::string labelIncrement = newLabel();
 
+            // Generate initialization
+            if (loop->init) {
+                generateStmt(loop->init);
+            }
+
+            // Start label
             module.addInstruction(IRInstruction(IROpCode::Label, labelStart));
-            generateStmt(loop->block);
+
+            // Generate condition check
+            if (loop->condition) {
+                std::string condTemp = generateExpr(loop->condition);
+                module.addInstruction(IRInstruction(IROpCode::JumpIfNot, labelEnd, condTemp));
+            }
+
+            // Generate loop body
+            if (loop->block) {
+                generateStmt(loop->block);
+            }
+
+            // Increment label
+            module.addInstruction(IRInstruction(IROpCode::Label, labelIncrement));
+
+            // Generate increment
+            if (loop->increment) {
+                generateStmt(loop->increment);
+            }
+
+            // Jump back to start
             module.addInstruction(IRInstruction(IROpCode::Jump, labelStart));
+
+            // End label
             module.addInstruction(IRInstruction(IROpCode::Label, labelEnd));
         }
         else if (auto ret = std::dynamic_pointer_cast<ReturnStmt>(stmt)) {
@@ -812,6 +903,11 @@ private:
     NodePtr parsePrimary();
     NodePtr parseBinOpRHS(int minPrec, NodePtr lhs);
     int precedenceOf(const std::string& op);
+    
+    // NEW: Parse loop with header components
+    NodePtr parseLoopWithHeader();
+    NodePtr parseStatementFromString(const std::string& stmtStr);
+    NodePtr parseExpressionFromString(const std::string& exprStr);
 };
 
 bool Parser::match(const std::string& kw) {
@@ -843,11 +939,13 @@ NodePtr Parser::parseStatement() {
         auto f = std::make_shared<FunctionDecl>();
         f->name = name.lexeme; f->body = body; return f;
     }
+    
     if (match("Print")) {
         auto stmt = std::make_shared<PrintStmt>();
         stmt->expr = parseExpression();
         match(";"); return stmt;
     }
+    
     if (match("if")) {
         match("(");
         auto cond = parseExpression();
@@ -859,11 +957,36 @@ NodePtr Parser::parseStatement() {
         s->condition = cond; s->thenBlock = thenBlk; s->elseBlock = elseBlk;
         return s;
     }
+    
     if (match("loop")) {
-        auto l = std::make_shared<LoopStmt>();
-        l->block = parseBlock();
-        return l;
+        // Check if it's a structured loop with header
+        if (check("(")) {
+            return parseLoopWithHeader();
+        } else {
+            // Infinite loop: loop { body }
+            auto l = std::make_shared<LoopStmt>();
+            l->block = parseBlock();
+            return l;
+        }
     }
+    
+    // Handle variable declarations
+    if (match("let")) {
+        auto typeToken = advance();
+        auto nameToken = advance();
+        
+        auto varDecl = std::make_shared<VarDecl>();
+        varDecl->type = typeToken.lexeme;
+        varDecl->name = nameToken.lexeme;
+        
+        if (match("=")) {
+            varDecl->initializer = parseExpression();
+        }
+        
+        match(";");
+        return varDecl;
+    }
+    
     return parseExpression();
 }
 
@@ -919,6 +1042,74 @@ NodePtr Parser::parseBinOpRHS(int minPrec, NodePtr lhs) {
         bin->op = op;
         lhs = bin;
     }
+}
+
+NodePtr Parser::parseLoopWithHeader() {
+    // Expecting: loop (init; condition; increment) { body }
+    auto loopStmt = std::make_shared<LoopStmt>();
+    
+    if (match("(")) {
+        // Parse header components
+        std::string headerStr;
+        int parenDepth = 1;
+        size_t startPos = pos;
+        
+        // Collect tokens until closing paren
+        while (parenDepth > 0 && !isAtEnd()) {
+            if (peek().lexeme == "(") parenDepth++;
+            else if (peek().lexeme == ")") parenDepth--;
+            
+            if (parenDepth > 0) {
+                if (!headerStr.empty()) headerStr += " ";
+                headerStr += peek().lexeme;
+            }
+            advance();
+        }
+        
+        loopStmt->ceremonyHeader = headerStr;
+        
+        // Split header by semicolons
+        auto parts = splitString(headerStr, ';');
+        
+        if (parts.size() == 3) {
+            // Three-part loop: init; condition; increment
+            loopStmt->init = parseStatementFromString(trim(parts[0]));
+            loopStmt->condition = parseExpressionFromString(trim(parts[1]));
+            loopStmt->increment = parseStatementFromString(trim(parts[2]));
+        } else if (parts.size() == 1) {
+            // Condition-only loop (while-style)
+            loopStmt->condition = parseExpressionFromString(trim(parts[0]));
+        }
+    }
+    
+    // Parse loop body
+    loopStmt->block = parseBlock();
+    
+    return loopStmt;
+}
+
+NodePtr Parser::parseStatementFromString(const std::string& stmtStr) {
+    if (stmtStr.empty()) return nullptr;
+    
+    // Tokenize the statement string
+    Lexer subLexer(stmtStr);
+    auto subTokens = subLexer.tokenize();
+    
+    // Create temporary parser
+    Parser subParser(subTokens);
+    return subParser.parseStatement();
+}
+
+NodePtr Parser::parseExpressionFromString(const std::string& exprStr) {
+    if (exprStr.empty()) return nullptr;
+    
+    // Tokenize the expression string
+    Lexer subLexer(exprStr);
+    auto subTokens = subLexer.tokenize();
+    
+    // Create temporary parser
+    Parser subParser(subTokens);
+    return subParser.parseExpression();
 }
 
 // -----------------------------------------------------------------------------
@@ -1144,7 +1335,35 @@ void SemanticAnalyzer::analyzeStmt(NodePtr stmt) {
         }
     }
     else if (auto loop = std::dynamic_pointer_cast<LoopStmt>(stmt)) {
-        analyzeBlock(*std::static_pointer_cast<Block>(loop->block));
+        // Enter loop scope
+        symTable.enterScope();
+        
+        // Analyze initialization (registers loop variable)
+        if (loop->init) {
+            analyzeStmt(loop->init);
+        }
+        
+        // Analyze condition
+        if (loop->condition) {
+            std::string condType;
+            analyzeExpr(loop->condition, condType);
+            if (condType != "bool" && condType != "unknown") {
+                reportError("Loop condition must be boolean, got '" + condType + "'");
+            }
+        }
+        
+        // Analyze increment
+        if (loop->increment) {
+            analyzeStmt(loop->increment);
+        }
+        
+        // Analyze loop body
+        if (loop->block) {
+            analyzeBlock(*std::static_pointer_cast<Block>(loop->block));
+        }
+        
+        // Exit loop scope
+        symTable.exitScope();
     }
     else if (auto print = std::dynamic_pointer_cast<PrintStmt>(stmt)) {
         std::string exprType;
