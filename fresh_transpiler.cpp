@@ -1,3 +1,4 @@
+#pragma once
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -7,7 +8,8 @@
 #include <cctype>
 #include <iomanip>
 #include <memory>
-#include <algorithm>  // Add this for std::sort
+#include <algorithm>
+#include <filesystem>
 
 enum class TokenType {
     Keyword, Identifier, Number, String, Operator, Symbol, Comment,
