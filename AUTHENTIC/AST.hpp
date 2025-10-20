@@ -19,7 +19,13 @@ static void indent(int depth) {
 // Base node types
 struct Node { 
     virtual ~Node() = default; 
-    virtual void print(int depth = 0) const = 0; 
+    virtual void print(int depth = 0) const = 0;
+    
+    // Error tracking
+    int line = 0;
+    int column = 0;
+    
+    void setLocation(int l, int c) { line = l; column = c; }
 };
 
 struct Expr : Node {};
