@@ -1,0 +1,28 @@
+# C.A.S.E. Standard Library Test
+
+Print "=== Standard Library Demo ===" [end]
+
+# Math Functions
+Print "--- Math Library ---" [end]
+let x = 3.14
+let result = sin x [end]
+let power = pow 2 10 [end]
+let minVal = min 5 10 [end]
+let maxVal = max 5 10 [end]
+Print power [end]
+
+# String Functions  
+Print "--- String Library ---" [end]
+let text = "Hello World"
+let len = length text [end]
+let upper_text = upper text [end]
+Print upper_text [end]
+
+# Collection Functions
+Print "--- Collection Library ---" [end]
+let nums = [1, 2, 3, 4, 5]
+let listSize = size nums [end]
+push nums 6 [end]
+Print "List operations complete" [end]
+
+Print "=== Standard Library Complete! ===" [end]
