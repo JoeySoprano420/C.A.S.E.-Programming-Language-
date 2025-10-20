@@ -1,1 +1,36 @@
+# FizzBuzz - Classic Programming Challenge
+
+Print "=== FizzBuzz ===" [end]
+Print "Numbers 1-30, replacing:" [end]
+Print "  Multiples of 3 with 'Fizz'" [end]
+Print "  Multiples of 5 with 'Buzz'" [end]
+Print "  Multiples of both with 'FizzBuzz'" [end]
+Print "" [end]
+
+let n = 1
+
+while n <= 30 {
+    # Check if divisible by both 3 and 5
+    if n % 15 == 0 {
+        Print "FizzBuzz" [end]
+    } else {
+        # Check if divisible by 3
+        if n % 3 == 0 {
+            Print "Fizz" [end]
+        } else {
+            # Check if divisible by 5
+            if n % 5 == 0 {
+                Print "Buzz" [end]
+            } else {
+                # Just print the number
+                Print n [end]
+            }
+        }
+    }
+    
+    mutate n n + 1 [end]
+}
+
+Print "" [end]
+Print "FizzBuzz complete!" [end]
 
