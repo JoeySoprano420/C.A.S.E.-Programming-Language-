@@ -1,0 +1,27 @@
+# Test BATCH 1: Type System Extensions
+
+# Enum test
+enum Color {
+    Red,
+    Green,
+    Blue
+} [end]
+
+# Union test  
+union Data {
+    int i
+    float f
+    char c
+} [end]
+
+# Typedef test
+typedef int MyInt [end]
+typedef double Real [end]
+
+# Struct test (already working)
+struct Point {
+    int x
+    int y
+} [end]
+
+Print "Type system test complete!" [end]
