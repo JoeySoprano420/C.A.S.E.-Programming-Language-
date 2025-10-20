@@ -1,0 +1,63 @@
+# C.A.S.E. Language - Comprehensive Feature Test
+# Tests BATCH 1-5 keywords
+
+# BATCH 1: Type System
+enum Status { Active, Pending, Completed } [end]
+
+struct User {
+    string name
+    int age
+} [end]
+
+typedef int UserId [end]
+
+# BATCH 2: File I/O
+open "data.txt" "w" fileHandle [end]
+writeln fileHandle "Hello, World!" [end]
+close fileHandle [end]
+
+input "Enter your name: " userName [end]
+
+# BATCH 3: Security & Monitoring
+sanitize_mem sensitiveData [end]
+temperature "cpu" [end]
+pressure "memory" [end]
+audit "replay" system [end]
+
+# BATCH 4: Data Manipulation
+let value = 100
+mutate value value * 2 [end]
+scale value 1.5 [end]
+bounds value 0 200 [end]
+checkpoint "state1" value [end]
+
+# BATCH 5: Advanced Concurrency
+sync resource1, resource2 {
+    Print "Synchronized block" [end]
+} [end]
+
+parallel {
+    { Print "Task 1" [end] }
+    { Print "Task 2" [end] }
+    { Print "Task 3" [end] }
+} [end]
+
+batch dataList 50 {
+    Print "Processing batch" [end]
+} [end]
+
+schedule "deferred" {
+    Print "Scheduled task" [end]
+} [end]
+
+# Advanced Features
+matrix dataMatrix 4 4 [end]
+
+Fn ProcessData "data" (
+    Print "Processing..." [end]
+    ret data
+) [end]
+
+call ProcessData "test" [end]
+
+Print "All features tested!" [end]
