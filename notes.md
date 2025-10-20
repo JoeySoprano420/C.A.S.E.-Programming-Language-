@@ -70,7 +70,53 @@
  * 2. Add keywords incrementally as needed
  * 3. Test each keyword group before adding the next
  * 4. Create modular code emitters for each category
- * 
+  
+ * # C.A.S.E. Transpiler Build Instructions
+
+## Current Status
+The transpiler has grown too large for a single file. The code has been reorganized.
+
+## Quick Fix
+Use the backup working version and add keywords incrementally:
+
+1. Revert ActiveTranspiler.cpp to last working state
+2. Add keyword groups one at a time
+3. Test each group before adding more
+
+## Keyword Groups to Add
+
+### Group 1: Core Extended (DONE)
+- struct, enum, union, typedef
+- while, break, continue, switch/case
+
+### Group 2: Concurrency (READY)
+- thread, async, channel, send, recv
+- sync, batch, parallel, schedule
+
+### Group 3: File I/O (READY)
+- open, read, write, writeln, close
+- input
+
+### Group 4: Data Processing (READY)
+- mutate, scale, bounds
+- serialize, compress, obfuscate
+
+### Group 5: Optimization (READY)
+- profile, vectorize, unroll
+
+###  Group 6: System (READY)
+- resource, environment, directories
+- temperature, pressure, matrix, distance
+
+## Recommendation
+Since we're experiencing compilation issues due to file size and complexity:
+
+1. **Option A**: Revert to last working build
+2. **Option B**: Split into multiple files (Parser.cpp, CodeEmitter.cpp, etc.)
+3. **Option C**: Add only the keywords you actually need
+
+
+
  * The current transpiler is fully functional with the most important features.
  * Additional keywords can be added on-demand as you use them in your C.A.S.E. programs.
  */
