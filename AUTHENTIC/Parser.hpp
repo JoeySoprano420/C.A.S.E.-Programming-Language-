@@ -34,14 +34,19 @@ private:
     bool match(const std::string& kw);
     bool check(const std::string& kw) const;
     bool isAtEnd() const;
+    bool matchEnd();
+    
+    // Error reporting
+    void reportError(const std::string& msg, const std::string& suggestion = "");
+    std::string tokenTypeToString(TokenType t);
 
+    // Parsing methods
     NodePtr parseStatement();
     NodePtr parseBlock();
     NodePtr parseExpression();
     NodePtr parsePrimary();
     NodePtr parseBinOpRHS(int minPrec, NodePtr lhs);
     int precedenceOf(const std::string& op);
-    bool matchEnd();
 
     // Core statements
     NodePtr parseWhile();
