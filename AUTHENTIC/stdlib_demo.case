@@ -1,1 +1,93 @@
+# Standard Library Demo - Math, Strings, Collections
+
+Print "=== C.A.S.E. Standard Library Demo ===" [end]
+
+# === MATH FUNCTIONS ===
+Print "" [end]
+Print "--- Math Functions ---" [end]
+
+let angle = 45
+Print "sin(45) = " [end]
+let sineResult = sin angle [end]
+Print sineResult [end]
+
+let base = 2
+let exp = 8
+Print "2^8 = " [end]
+let powerResult = pow base exp [end]
+Print powerResult [end]
+
+let num = 16
+Print "sqrt(16) = " [end]
+let sqrtResult = sqrt num [end]
+Print sqrtResult [end]
+
+Print "abs(-5) = " [end]
+let absResult = abs -5 [end]
+Print absResult [end]
+
+Print "round(3.7) = " [end]
+let roundResult = round 3.7 [end]
+Print roundResult [end]
+
+let a = 5
+let b = 10
+Print "min(5, 10) = " [end]
+let minResult = min a b [end]
+Print minResult [end]
+
+Print "max(5, 10) = " [end]
+let maxResult = max a b [end]
+Print maxResult [end]
+
+# === STRING FUNCTIONS ===
+Print "" [end]
+Print "--- String Functions ---" [end]
+
+let text = "Hello, World!"
+Print "Original: " [end]
+Print text [end]
+
+Print "Length: " [end]
+let len = length text [end]
+Print len [end]
+
+Print "Uppercase: " [end]
+let upper = upper text [end]
+Print upper [end]
+
+Print "Lowercase: " [end]
+let lower = lower text [end]
+Print lower [end]
+
+Print "Substring (0-5): " [end]
+let sub = substr text 0 5 [end]
+Print sub [end]
+
+# === COLLECTION FUNCTIONS ===
+Print "" [end]
+Print "--- Collection Functions ---" [end]
+
+let nums = [5, 2, 8, 1, 9, 3]
+Print "Original list: " [end]
+Print nums [end]
+
+Print "Size: " [end]
+let count = size nums [end]
+Print count [end]
+
+push nums 7 [end]
+Print "After push(7): " [end]
+Print nums [end]
+
+sort nums [end]
+Print "After sort: " [end]
+Print nums [end]
+
+reverse nums [end]
+Print "After reverse: " [end]
+Print nums [end]
+
+Print "" [end]
+Print "=== Demo Complete! ===" [end]
 
