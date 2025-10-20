@@ -7,7 +7,7 @@ C.A.S.E. is a self-hosting, introspective programming language that unites compi
 transpiler.CPP → compiler.case → compiler.CPP → compiler.exe → (rebuild itself) 
 🧩 1. The Language 
 🔤 Syntax Philosophy 
-C.A.S.E. syntax reads like structured pseudocode but compiles like machine logic. Every instruction maps to real executable output — not simulation. 
+C.A.S.E. syntax reads like semi-English but compiles like machine logic. Every instruction maps to real executable output — not simulation. 
 Fn add "int a", "int b" ( 
 let sum = a + b 
 ret sum 
