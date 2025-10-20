@@ -1,3 +1,8 @@
+🌌 Violet Aura Creations
+C.A.S.E. Programming Language v1.0
+"Code Assisted Syntax Evolution"
+From vision to completion - a complete programming language! 🚀✨
+
 syntax:
 
 print ("Hello, World!") [end] 
