@@ -1,1 +1,50 @@
+# Temperature Converter
+
+Fn celsiusToFahrenheit "celsius" (
+    ret celsius * 9 / 5 + 32
+) [end]
+
+Fn fahrenheitToCelsius "fahrenheit" (
+    ret (fahrenheit - 32) * 5 / 9
+) [end]
+
+Fn showMenu "" (
+    Print "=== Temperature Converter ===" [end]
+    Print "1. Celsius to Fahrenheit" [end]
+    Print "2. Fahrenheit to Celsius" [end]
+    Print "3. Exit" [end]
+) [end]
+
+let running = true
+
+while running {
+    call showMenu [end]
+    input "Choose option: " choice [end]
+    
+    if choice == 1 {
+        input "Enter temperature in Celsius: " temp [end]
+        let result = call celsiusToFahrenheit temp [end]
+        Print temp [end]
+        Print "°C = " [end]
+        Print result [end]
+        Print "°F" [end]
+    } else {
+        if choice == 2 {
+            input "Enter temperature in Fahrenheit: " temp [end]
+            let result = call fahrenheitToCelsius temp [end]
+            Print temp [end]
+            Print "°F = " [end]
+            Print result [end]
+            Print "°C" [end]
+        } else {
+            if choice == 3 {
+                mutate running false [end]
+                Print "Goodbye!" [end]
+            } else {
+                Print "Invalid choice!" [end]
+            }
+        }
+    }
+    Print "" [end]
+}
 
