@@ -24,6 +24,166 @@
 #include "intelligence.hpp"  // CIAM preprocessor
 
 // -----------------------------------------------------------------------------
+// ENHANCED ERROR REPORTING
+// -----------------------------------------------------------------------------
+
+enum class ErrorLevel {
+    Info,
+    Warning,
+    Error,
+    Fatal
+};
+
+struct ErrorMessage {
+    ErrorLevel level;
+    std::string message;
+    std::string filename;
+    int line;
+    int column;
+    std::string context;  // Code snippet showing the error
+    std::string suggestion;  // Helpful suggestion
+};
+
+class ErrorReporter {
+public:
+    ErrorReporter(const std::string& src, const std::string& file = "<input>")
+        : source(src), filename(file), errorCount(0), warningCount(0) {
+        buildLineIndex();
+    }
+
+    void reportError(const std::string& msg, int line, int col, const std::string& suggestion = "") {
+        ErrorMessage err;
+        err.level = ErrorLevel::Error;
+        err.message = msg;
+        err.filename = filename;
+        err.line = line;
+        err.column = col;
+        err.context = getLineContext(line, col);
+        err.suggestion = suggestion;
+        errors.push_back(err);
+        errorCount++;
+        printError(err);
+    }
+
+    void reportWarning(const std::string& msg, int line, int col, const std::string& suggestion = "") {
+        ErrorMessage warn;
+        warn.level = ErrorLevel::Warning;
+        warn.message = msg;
+        warn.filename = filename;
+        warn.line = line;
+        warn.column = col;
+        warn.context = getLineContext(line, col);
+        warn.suggestion = suggestion;
+        errors.push_back(warn);
+        warningCount++;
+        printError(warn);
+    }
+
+    void reportInfo(const std::string& msg) {
+        std::cout << "\033[1;36m[Info]\033[0m " << msg << "\n";
+    }
+
+    int getErrorCount() const { return errorCount; }
+    int getWarningCount() const { return warningCount; }
+    bool hasErrors() const { return errorCount > 0; }
+
+    void printSummary() const {
+        if (errorCount > 0 || warningCount > 0) {
+            std::cout << "\n\033[1;33m=== Compilation Summary ===\033[0m\n";
+            if (errorCount > 0) {
+                std::cout << "\033[1;31m" << errorCount << " error(s)\033[0m";
+            }
+            if (warningCount > 0) {
+                if (errorCount > 0) std::cout << ", ";
+                std::cout << "\033[1;33m" << warningCount << " warning(s)\033[0m";
+            }
+            std::cout << "\n";
+        }
+    }
+
+private:
+    std::string source;
+    std::string filename;
+    std::vector<ErrorMessage> errors;
+    std::vector<size_t> lineStarts;  // Index of start of each line
+    int errorCount;
+    int warningCount;
+
+    void buildLineIndex() {
+        lineStarts.push_back(0);
+        for (size_t i = 0; i < source.size(); ++i) {
+            if (source[i] == '\n') {
+                lineStarts.push_back(i + 1);
+            }
+        }
+    }
+
+    std::string getLineContext(int line, int col) {
+        if (line < 1 || line > static_cast<int>(lineStarts.size())) {
+            return "";
+        }
+
+        size_t start = lineStarts[line - 1];
+        size_t end = (line < static_cast<int>(lineStarts.size())) 
+                     ? lineStarts[line] - 1 
+                     : source.size();
+
+        // Extract the line
+        std::string lineText = source.substr(start, end - start);
+        
+        // Build context with pointer
+        std::ostringstream context;
+        context << lineText << "\n";
+        
+        // Add pointer to error column
+        for (int i = 1; i < col; ++i) {
+            context << " ";
+        }
+        context << "\033[1;31m^\033[0m";
+        
+        return context.str();
+    }
+
+    void printError(const ErrorMessage& err) {
+        // Color codes
+        std::string levelColor;
+        std::string levelName;
+        
+        switch (err.level) {
+            case ErrorLevel::Info:
+                levelColor = "\033[1;36m";
+                levelName = "Info";
+                break;
+            case ErrorLevel::Warning:
+                levelColor = "\033[1;33m";
+                levelName = "Warning";
+                break;
+            case ErrorLevel::Error:
+                levelColor = "\033[1;31m";
+                levelName = "Error";
+                break;
+            case ErrorLevel::Fatal:
+                levelColor = "\033[1;35m";
+                levelName = "Fatal";
+                break;
+        }
+
+        std::cerr << "\n" << levelColor << "[" << levelName << "]\033[0m ";
+        std::cerr << err.filename << ":" << err.line << ":" << err.column << "\n";
+        std::cerr << "  " << err.message << "\n";
+        
+        if (!err.context.empty()) {
+            std::cerr << "\n";
+            std::cerr << std::setw(5) << err.line << " | " << err.context << "\n";
+        }
+        
+        if (!err.suggestion.empty()) {
+            std::cerr << "\n\033[1;32m[Suggestion]\033[0m " << err.suggestion << "\n";
+        }
+    }
+};
+
+// -----------------------------------------------------------------------------
 // TOKEN TYPES (shared with Parser)
 // -----------------------------------------------------------------------------
 
@@ -172,8 +332,8 @@ private:
 
 class Lexer {
 public:
-    explicit Lexer(const std::string& src)
-        : source(src), pos(0), line(1), column(1) {}
+    explicit Lexer(const std::string& src, ErrorReporter* reporter = nullptr)
+        : source(src), pos(0), line(1), column(1), errorReporter(reporter) {}
 
     std::vector<Token> tokenize() {
         std::vector<Token> tokens;
@@ -210,6 +370,7 @@ private:
     size_t pos;
     int line;
     int column;
+    ErrorReporter* errorReporter;
 
     const std::unordered_set<std::string> keywords = {
         "Print","ret","loop","if","else","Fn","call","let","while","break","continue",
@@ -308,8 +469,11 @@ private:
                 value += advance();
             }
         }
-        if (peek() == '"') advance();
-        else reportError("Unterminated string literal");
+        if (peek() == '"') {
+            advance();
+        } else {
+            reportError("Unterminated string literal", '\0');
+        }
         return { TokenType::String, value, line, (int)startCol };
     }
 
@@ -329,10 +493,27 @@ private:
     }
 
     void reportError(const std::string& msg, char c = '\0') {
-        std::cerr << "\033[1;31m[Lexer Error]\033[0m Line " << line
-            << ", Col " << column << ": " << msg;
-        if (c != '\0') std::cerr << " ('" << c << "')";
-        std::cerr << "\n";
+        std::string fullMsg = msg;
+        if (c != '\0') {
+            fullMsg += " ('" + std::string(1, c) + "')";
+        }
+        
+        if (errorReporter) {
+            std::string suggestion;
+            
+            // Provide helpful suggestions
+            if (msg.find("Unterminated") != std::string::npos) {
+                suggestion = "Add a closing quote (\") to complete the string literal";
+            } else if (msg.find("Unexpected character") != std::string::npos) {
+                suggestion = "This character is not valid C.A.S.E. syntax. Check for typos.";
+            }
+            
+            errorReporter->reportError(fullMsg, line, column, suggestion);
+        } else {
+            // Fallback if no reporter
+            std::cerr << "\033[1;31m[Lexer Error]\033[0m Line " << line
+                      << ", Col " << column << ": " << fullMsg << "\n";
+        }
     }
 };
 
@@ -355,18 +536,28 @@ int main(int argc, char** argv) {
     try {
         std::string source = readFile(argv[1]);
         
+        // Create error reporter
+        ErrorReporter errorReporter(source, argv[1]);
+        
         // CIAM preprocessing if enabled
         if (source.find("call CIAM[on]") != std::string::npos) {
+            errorReporter.reportInfo("CIAM preprocessing enabled");
             ciam::Preprocessor ciamPre;
             source = ciamPre.Process(source);
         }
 
         // Lexical analysis
-        Lexer lexer(source);
+        Lexer lexer(source, &errorReporter);
         auto tokens = lexer.tokenize();
+
+        if (errorReporter.hasErrors()) {
+            errorReporter.printSummary();
+            return 1;
+        }
 
         std::cout << "\n\033[1;36m=== Token Stream ===\033[0m\n";
         for (const auto& t : tokens) {
+            if (t.type == TokenType::EndOfFile) continue;
             std::cout << std::setw(5) << t.line << ":" << std::setw(3) << t.column << " | "
                 << std::left << std::setw(12) << tokenTypeToString(t.type)
                 << " -> \"" << t.lexeme << "\"\n";
@@ -388,15 +579,20 @@ int main(int argc, char** argv) {
         std::cout << "\n\033[1;32m✅ Generated compiler.cpp\033[0m\n";
 
         // Compile generated C++ code
-        std::string compileCmd = "clang++ -std=c++20 -O3 compiler.cpp -o program.exe";
-        if (system(compileCmd.c_str()) == 0) {
+        std::string compileCmd = "clang++ -std=c++20 -O3 compiler.cpp -o program.exe 2>&1";
+        int result = system(compileCmd.c_str());
+        if (result == 0) {
             std::cout << "\033[1;32m✅ Compiled to program.exe\033[0m\n";
+        } else {
+            std::cerr << "\033[1;33m⚠️  C++ compilation had warnings/errors\033[0m\n";
+            std::cerr << "Check compiler.cpp for details\n";
         }
 
-        return 0;
+        errorReporter.printSummary();
+        return errorReporter.hasErrors() ? 1 : 0;
     }
     catch (const std::exception& e) {
-        std::cerr << "\033[1;31m[Error]\033[0m " << e.what() << "\n";
+        std::cerr << "\033[1;31m[Fatal Error]\033[0m " << e.what() << "\n";
         return 1;
     }
 }
