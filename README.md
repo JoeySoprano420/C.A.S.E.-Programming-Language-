@@ -1,4 +1,6 @@
-**USES C++14**
+syntax:
+
+print ("Hello, World!") [end] 
 
 🧠 C.A.S.E. — Compiler Assembler Strategic Execution 
 The Self-Hosting Symbolic Systems Language 
