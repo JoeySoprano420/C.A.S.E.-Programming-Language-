@@ -1,6 +1,6 @@
 # C.A.S.E. Language Support for VS Code
 
-Official Visual Studio Code extension for the **C.A.S.E.** (Code Assisted Syntax Evolution) programming language.
+Official Visual Studio Code extension for the **C.A.S.E.** ( Compiler Assembler Strategic Execution A.K.A. Code Assisted Syntax Evolution) programming language.
 
 ## Features
 
@@ -176,14 +176,14 @@ Found a bug or have a feature request? Please open an issue on [GitHub](https://
 
 ## Resources
 
-- [Language Reference](https://github.com/VioletAuraCreations/case-language/blob/main/LANGUAGE_REFERENCE.md)
-- [Getting Started Guide](https://github.com/VioletAuraCreations/case-language/blob/main/GETTING_STARTED.md)
-- [Tutorial Series](https://github.com/VioletAuraCreations/case-language/blob/main/TUTORIALS.md)
-- [API Documentation](https://github.com/VioletAuraCreations/case-language/blob/main/API_REFERENCE.md)
+- [Language Reference](https://github.com/JoeySoprano420/case-language/blob/main/LANGUAGE_REFERENCE.md)
+- [Getting Started Guide](https://github.com/JoeySoprano420/case-language/blob/main/GETTING_STARTED.md)
+- [Tutorial Series](https://github.comJoeySoprano420/case-language/blob/main/TUTORIALS.md)
+- [API Documentation](https://github.com/JoeySoprano420/case-language/blob/main/API_REFERENCE.md)
 
 ## License
 
-MIT License - See LICENSE file for details
+S.U.E.T. License - See LICENSE file for details
 
 ---
 
