@@ -5,6 +5,7 @@
 #include "Parser.hpp"
 #include <memory>
 #include <unordered_set>
+#include <sstream>
 
 Parser::Parser(const std::vector<Token>& t) : tokens(t), pos(0) {}
 
@@ -32,10 +33,43 @@ bool Parser::matchEnd() {
             if (check("]")) {
                 advance();
                 return true;
+            } else {
+                reportError("Expected ']' after 'end'", "Close the statement with [end]");
+                return false;
             }
+        } else {
+            reportError("Expected 'end' after '['", "Statements must end with [end]");
+            return false;
         }
+    } else {
+        reportError("Expected '[end]' to close statement", "All statements must end with [end]");
+        return false;
     }
-    return false;
+}
+
+void Parser::reportError(const std::string& msg, const std::string& suggestion) {
+    const Token& tok = peek();
+    std::cerr << "\n\033[1;31m[Parser Error]\033[0m Line " << tok.line << ", Column " << tok.column << "\n";
+    std::cerr << "  " << msg << "\n";
+    std::cerr << "  Found: \"" << tok.lexeme << "\" (" << tokenTypeToString(tok.type) << ")\n";
+    
+    if (!suggestion.empty()) {
+        std::cerr << "\n\033[1;32m[Suggestion]\033[0m " << suggestion << "\n";
+    }
+}
+
+std::string Parser::tokenTypeToString(TokenType t) {
+    switch (t) {
+    case TokenType::Keyword:   return "Keyword";
+    case TokenType::Identifier:return "Identifier";
+    case TokenType::Number:    return "Number";
+    case TokenType::String:    return "String";
+    case TokenType::Operator:  return "Operator";
+    case TokenType::Symbol:    return "Symbol";
+    case TokenType::Comment:   return "Comment";
+    case TokenType::EndOfFile: return "End of File";
+    default:                   return "Unknown";
+    }
 }
 
 int Parser::precedenceOf(const std::string& op) {
