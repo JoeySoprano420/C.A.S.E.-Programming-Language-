@@ -1,1 +1,34 @@
+# Factorial Calculator
+
+Fn factorial "n" (
+    if n <= 1 {
+        ret 1
+    } else {
+        let prev = call factorial (n - 1) [end]
+        ret n * prev
+    }
+) [end]
+
+Print "=== Factorial Calculator ===" [end]
+input "Enter a number: " num [end]
+
+let result = call factorial num [end]
+
+Print "Factorial of " [end]
+Print num [end]
+Print " is " [end]
+Print result [end]
+
+# Print first 10 factorials
+Print "" [end]
+Print "First 10 factorials:" [end]
+
+let i = 1
+while i <= 10 {
+    let fact = call factorial i [end]
+    Print i [end]
+    Print "! = " [end]
+    Print fact [end]
+    mutate i i + 1 [end]
+}
 
