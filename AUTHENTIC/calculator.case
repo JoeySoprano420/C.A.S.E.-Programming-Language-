@@ -1,0 +1,55 @@
+# Simple Calculator in C.A.S.E.
+
+# Function to perform calculation
+Fn calculate "num1, num2, operation" (
+    if operation == "+" {
+        ret num1 + num2
+    } else {
+        if operation == "-" {
+            ret num1 - num2
+        } else {
+            if operation == "*" {
+                ret num1 * num2
+            } else {
+                if operation == "/" {
+                    if num2 == 0 {
+                        Print "Error: Division by zero!" [end]
+                        ret 0
+                    }
+                    ret num1 / num2
+                } else {
+                    if operation == "^" {
+                        ret pow num1 num2 [end]
+                    } else {
+                        Print "Unknown operation" [end]
+                        ret 0
+                    }
+                }
+            }
+        }
+    }
+) [end]
+
+# Display menu
+Fn showMenu "" (
+    Print "=== C.A.S.E. Calculator ===" [end]
+    Print "Operations:" [end]
+    Print "  + : Addition" [end]
+    Print "  - : Subtraction" [end]
+    Print "  * : Multiplication" [end]
+    Print "  / : Division" [end]
+    Print "  ^ : Power" [end]
+) [end]
+
+# Main program
+call showMenu [end]
+
+input "Enter first number: " num1 [end]
+input "Enter operation (+,-,*,/,^): " op [end]
+input "Enter second number: " num2 [end]
+
+let result = call calculate num1 num2 op [end]
+
+Print "Result: " [end]
+Print result [end]
+

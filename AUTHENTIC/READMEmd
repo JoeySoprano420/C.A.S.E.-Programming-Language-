@@ -1,0 +1,193 @@
+# C.A.S.E. Language Support for VS Code
+
+Official Visual Studio Code extension for the **C.A.S.E.** (Code Assisted Syntax Evolution) programming language.
+
+## Features
+
+### 🎨 Syntax Highlighting
+- Full syntax highlighting for all 98+ keywords
+- Color-coded operators, strings, numbers, and comments
+- Special highlighting for `[end]` statement terminators
+- Custom C.A.S.E. Dark theme
+
+### ✨ IntelliSense & Auto-completion
+- Smart keyword completion
+- Function name suggestions
+- Snippet completions for common patterns
+- Parameter hints
+
+### 📝 Code Snippets
+- 30+ ready-to-use code snippets
+- Quick templates for:
+  - Functions and variables
+  - Control flow (if, while, loop)
+  - File I/O operations
+  - Math and string functions
+  - Database and networking
+  - Concurrency primitives
+  - Graphics and UI
+
+### 🔨 Build & Run
+- **Compile**: `Ctrl+Shift+B` (Windows/Linux) or `Cmd+Shift+B` (Mac)
+- **Compile & Run**: `Ctrl+Shift+R` (Windows/Linux) or `Cmd+Shift+R` (Mac)
+- View compilation output in dedicated channel
+- Automatic error detection
+
+### 💡 Hover Documentation
+- Hover over keywords to see documentation
+- Quick reference for function syntax
+- Usage examples
+
+### ⚙️ Configuration Options
+- Set transpiler path
+- Enable auto-compile on save
+- Toggle AST display
+- Customize build options
+
+## Installation
+
+### From VSIX
+1. Download `case-language-1.0.0.vsix`
+2. Open VS Code
+3. Go to Extensions (`Ctrl+Shift+X`)
+4. Click `...` menu → `Install from VSIX...`
+5. Select the downloaded file
+
+### From Source
+```bash
+cd vscode-extension
+npm install
+npm run compile
+vsce package
+code --install-extension case-language-1.0.0.vsix
+```
+
+## Quick Start
+
+1. **Create a new file**: `hello.case`
+2. **Type**: `hello` and press Tab (uses snippet)
+3. **Compile**: Press `Ctrl+Shift+B`
+4. **Run**: Press `Ctrl+Shift+R`
+
+## Usage Examples
+
+### Hello World
+```case
+Print "Hello, World!" [end]
+```
+
+### Variables and Functions
+```case
+let x = 10
+
+Fn double "n" (
+    ret n * 2
+) [end]
+
+let result = call double x [end]
+Print result [end]
+```
+
+### Using Snippets
+
+Type these prefixes and press Tab:
+
+- `print` → Print statement
+- `fn` → Function definition
+- `if` → If statement
+- `while` → While loop
+- `sqrt` → Square root
+- `http` → HTTP request
+
+## Extension Settings
+
+This extension contributes the following settings:
+
+* `case.transpilerPath`: Path to the C.A.S.E. transpiler executable
+* `case.autoCompile`: Automatically compile files on save
+* `case.showAST`: Display AST output when compiling
+
+## Commands
+
+* `C.A.S.E.: Compile Current File` - Compile the active .case file
+* `C.A.S.E.: Compile and Run` - Compile and execute the program
+
+## Keyboard Shortcuts
+
+| Command | Windows/Linux | macOS |
+|---------|---------------|-------|
+| Compile | `Ctrl+Shift+B` | `Cmd+Shift+B` |
+| Compile & Run | `Ctrl+Shift+R` | `Cmd+Shift+R` |
+
+## Language Features
+
+### Supported Keywords (98+)
+
+**Core:** Print, let, Fn, call, if, else, while, loop, break, continue, ret, switch, case, default
+
+**Math:** sin, cos, tan, sqrt, pow, abs, floor, ceil, round, min, max, random
+
+**Strings:** length, substr, concat, split, join, upper, lower, trim, replace, find
+
+**Collections:** push, pop, shift, unshift, slice, map, filter, reduce, sort, reverse, size
+
+**File I/O:** open, write, writeln, read, close, input
+
+**Concurrency:** thread, async, channel, send, recv, sync, parallel, batch, schedule
+
+**Graphics:** window, draw, render, color, event, widget, layout
+
+**Database:** connect, query, insert, update, delete, transaction
+
+**Networking:** http, socket, websocket, listen, sendnet, receive
+
+**And many more!**
+
+## Theme
+
+The extension includes a custom **C.A.S.E. Dark** theme optimized for C.A.S.E. syntax:
+- Keywords in purple
+- Functions in yellow
+- Strings in orange
+- Numbers in light green
+- `[end]` terminators in red (hard to miss!)
+
+## Known Issues
+
+- The transpiler must be in your PATH or you must set `case.transpilerPath`
+- Auto-compile may slow down on very large files
+
+## Release Notes
+
+### 1.0.0
+
+Initial release:
+- Full syntax highlighting
+- 30+ code snippets
+- IntelliSense support
+- Build & run commands
+- Hover documentation
+- Custom theme
+- Auto-compile on save
+
+## Contributing
+
+Found a bug or have a feature request? Please open an issue on [GitHub](https://github.com/VioletAuraCreations/case-language).
+
+## Resources
+
+- [Language Reference](https://github.com/VioletAuraCreations/case-language/blob/main/LANGUAGE_REFERENCE.md)
+- [Getting Started Guide](https://github.com/VioletAuraCreations/case-language/blob/main/GETTING_STARTED.md)
+- [Tutorial Series](https://github.com/VioletAuraCreations/case-language/blob/main/TUTORIALS.md)
+- [API Documentation](https://github.com/VioletAuraCreations/case-language/blob/main/API_REFERENCE.md)
+
+## License
+
+MIT License - See LICENSE file for details
+
+---
+
+**🌌 Violet Aura Creations**  
+**C.A.S.E. Programming Language v1.0**
+
+*Enjoy coding in C.A.S.E.!* ✨

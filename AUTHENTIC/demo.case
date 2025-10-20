@@ -1,0 +1,29 @@
+# Quick Feature Demo - All Batches
+
+# Core Features
+Print "=== C.A.S.E. Feature Demo ===" [end]
+
+# BATCH 1: Type System
+enum Color { Red, Green, Blue } [end]
+Print "Type system ready" [end]
+
+# BATCH 2: File I/O
+input "Name: " name [end]
+Print name [end]
+
+# BATCH 3: Security
+temperature "cpu" [end]
+Print "Security monitoring active" [end]
+
+# BATCH 4: Data Manipulation
+let data = 42
+mutate data data + 8 [end]
+Print data [end]
+
+# BATCH 5: Concurrency
+parallel {
+    { Print "Worker 1" [end] }
+    { Print "Worker 2" [end] }
+} [end]
+
+Print "=== All features working! ===" [end]

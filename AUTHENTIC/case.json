@@ -1,0 +1,257 @@
+{
+  "Print Statement": {
+    "prefix": "print",
+    "body": [
+      "Print \"$1\" [end]"
+    ],
+    "description": "Print statement"
+  },
+  "Variable Declaration": {
+    "prefix": "let",
+    "body": [
+      "let ${1:varName} = ${2:value} [end]"
+    ],
+    "description": "Declare a variable"
+  },
+  "Function Definition": {
+    "prefix": "fn",
+    "body": [
+      "Fn ${1:functionName} \"${2:params}\" (",
+      "    ${3:// function body}",
+      "    ret ${4:value}",
+      ") [end]"
+    ],
+    "description": "Define a function"
+  },
+  "Function Call": {
+    "prefix": "call",
+    "body": [
+      "call ${1:functionName} ${2:args} [end]"
+    ],
+    "description": "Call a function"
+  },
+  "If Statement": {
+    "prefix": "if",
+    "body": [
+      "if ${1:condition} {",
+      "    ${2:// code}",
+      "} [end]"
+    ],
+    "description": "If statement"
+  },
+  "If-Else Statement": {
+    "prefix": "ifelse",
+    "body": [
+      "if ${1:condition} {",
+      "    ${2:// if code}",
+      "} else {",
+      "    ${3:// else code}",
+      "} [end]"
+    ],
+    "description": "If-else statement"
+  },
+  "While Loop": {
+    "prefix": "while",
+    "body": [
+      "while ${1:condition} {",
+      "    ${2:// loop body}",
+      "} [end]"
+    ],
+    "description": "While loop"
+  },
+  "For Loop": {
+    "prefix": "loop",
+    "body": [
+      "loop \"${1:int i = 0; i < 10; i++}\" {",
+      "    ${2:// loop body}",
+      "} [end]"
+    ],
+    "description": "For-style loop"
+  },
+  "File Open": {
+    "prefix": "open",
+    "body": [
+      "open \"${1:filename}\" \"${2|r,w,rw|}\" ${3:handle} [end]"
+    ],
+    "description": "Open a file"
+  },
+  "File Write": {
+    "prefix": "write",
+    "body": [
+      "writeln ${1:handle} \"${2:content}\" [end]"
+    ],
+    "description": "Write to file"
+  },
+  "File Read": {
+    "prefix": "read",
+    "body": [
+      "read ${1:handle} ${2:variable} [end]"
+    ],
+    "description": "Read from file"
+  },
+  "User Input": {
+    "prefix": "input",
+    "body": [
+      "input \"${1:prompt}\" ${2:variable} [end]"
+    ],
+    "description": "Get user input"
+  },
+  "Thread": {
+    "prefix": "thread",
+    "body": [
+      "thread {",
+      "    ${1:// thread code}",
+      "} [end]"
+    ],
+    "description": "Create a thread"
+  },
+  "Parallel Execution": {
+    "prefix": "parallel",
+    "body": [
+      "parallel {",
+      "    { ${1:// task 1} }",
+      "    { ${2:// task 2} }",
+      "} [end]"
+    ],
+    "description": "Execute tasks in parallel"
+  },
+  "Math - Square Root": {
+    "prefix": "sqrt",
+    "body": [
+      "sqrt ${1:number} [end]"
+    ],
+    "description": "Square root"
+  },
+  "Math - Power": {
+    "prefix": "pow",
+    "body": [
+      "pow ${1:base} ${2:exponent} [end]"
+    ],
+    "description": "Power function"
+  },
+  "String Length": {
+    "prefix": "length",
+    "body": [
+      "length ${1:string} [end]"
+    ],
+    "description": "Get string length"
+  },
+  "String Upper": {
+    "prefix": "upper",
+    "body": [
+      "upper ${1:string} [end]"
+    ],
+    "description": "Convert to uppercase"
+  },
+  "List Push": {
+    "prefix": "push",
+    "body": [
+      "push ${1:list} ${2:element} [end]"
+    ],
+    "description": "Add element to list"
+  },
+  "List Sort": {
+    "prefix": "sort",
+    "body": [
+      "sort ${1:list} [end]"
+    ],
+    "description": "Sort list"
+  },
+  "HTTP Request": {
+    "prefix": "http",
+    "body": [
+      "http \"${1|GET,POST,PUT,DELETE|}\" \"${2:url}\" ${3:result} [end]"
+    ],
+    "description": "Make HTTP request"
+  },
+  "Database Connect": {
+    "prefix": "connect",
+    "body": [
+      "connect \"${1|sqlite,mysql,postgres|}\" \"${2:connection}\" ${3:handle} [end]"
+    ],
+    "description": "Connect to database"
+  },
+  "Database Query": {
+    "prefix": "query",
+    "body": [
+      "query ${1:handle} \"${2:SELECT * FROM table}\" ${3:results} [end]"
+    ],
+    "description": "Execute database query"
+  },
+  "Window Create": {
+    "prefix": "window",
+    "body": [
+      "window \"${1:title}\" ${2:800} ${3:600} [end]"
+    ],
+    "description": "Create a window"
+  },
+  "Draw Rectangle": {
+    "prefix": "draw-rect",
+    "body": [
+      "draw \"rect\" ${1:x} ${2:y} ${3:width} ${4:height} [end]"
+    ],
+    "description": "Draw rectangle"
+  },
+  "Draw Circle": {
+    "prefix": "draw-circle",
+    "body": [
+      "draw \"circle\" ${1:x} ${2:y} ${3:radius} [end]"
+    ],
+    "description": "Draw circle"
+  },
+  "Set Color": {
+    "prefix": "color",
+    "body": [
+      "color ${1:255} ${2:0} ${3:0} ${4:255} [end]"
+    ],
+    "description": "Set drawing color (RGBA)"
+  },
+  "Struct Definition": {
+    "prefix": "struct",
+    "body": [
+      "struct ${1:Name} {",
+      "    ${2:int field1}",
+      "    ${3:string field2}",
+      "} [end]"
+    ],
+    "description": "Define a structure"
+  },
+  "Enum Definition": {
+    "prefix": "enum",
+    "body": [
+      "enum ${1:Name} {",
+      "    ${2:Value1},",
+      "    ${3:Value2}",
+      "} [end]"
+    ],
+    "description": "Define an enumeration"
+  },
+  "Comment": {
+    "prefix": "#",
+    "body": [
+      "# ${1:comment}"
+    ],
+    "description": "Comment line"
+  },
+  "Hello World": {
+    "prefix": "hello",
+    "body": [
+      "Print \"Hello, World!\" [end]"
+    ],
+    "description": "Hello World program"
+  },
+  "Main Program Template": {
+    "prefix": "main",
+    "body": [
+      "# ${1:Program Name}",
+      "# Author: ${2:Your Name}",
+      "",
+      "Print \"Starting program...\" [end]",
+      "",
+      "${3:// Your code here}",
+      "",
+      "Print \"Program complete!\" [end]"
+    ],
+    "description": "Main program template"
+  }
+}

@@ -1,0 +1,13 @@
+# Test file with intentional errors to showcase error handling
+
+# Missing [end] - should show helpful error
+Print "Hello World"
+
+# Good statement
+Print "This works!" [end]
+
+# Unterminated string
+let text = "This string never ends
+
+# Good statement
+Print "Another good one" [end]
