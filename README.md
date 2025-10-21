@@ -1,5 +1,5 @@
 🌌 Violet Aura Creations
-C.A.S.E. Programming Language v1.0
+C.A.S.E. Programming Language v1.1
 " Compiler Assembler Strategic Execution"
 From vision to completion - a complete programming language! 🚀✨
 
