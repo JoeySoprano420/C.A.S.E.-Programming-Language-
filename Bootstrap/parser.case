@@ -1,0 +1,571 @@
+# ============================================================================
+# C.A.S.E. Self-Hosted Compiler - Parser Module
+# ============================================================================
+# This module builds an Abstract Syntax Tree from tokens
+
+# AST Node Types
+enum ASTNodeType {
+    NodeProgram,
+    NodePrint,
+    NodeLet,
+    NodeFunction,
+    NodeCall,
+    NodeReturn,
+    NodeIf,
+    NodeWhile,
+    NodeBlock,
+    NodeBinaryOp,
+    NodeUnaryOp,
+    NodeIdentifier,
+    NodeNumber,
+    NodeString,
+    NodeBool
+} [end]
+
+# AST Node structure
+struct ASTNode {
+    int nodeType
+    string value
+    int line
+    int column
+} [end]
+
+# Parser state
+struct ParserState {
+    int position
+    int tokenCount
+} [end]
+
+# Global tokens array (passed to parser)
+let parserTokens = [] [end]
+
+# Initialize parser
+Fn initParser "tokens" (
+    mutate parserTokens tokens [end]
+    
+    let state = struct ParserState {
+        position = 0
+        tokenCount = size tokens [end]
+    } [end]
+    
+    ret state
+) [end]
+
+# Check if at end
+Fn parserAtEnd "state" (
+    ret state.position >= state.tokenCount
+) [end]
+
+# Peek current token
+Fn peek "state" (
+    if call parserAtEnd state [end] {
+        ret parserTokens[state.tokenCount - 1]
+    }
+    ret parserTokens[state.position]
+) [end]
+
+# Advance to next token
+Fn advance "state" (
+    if !call parserAtEnd state [end] {
+        mutate state.position state.position + 1 [end]
+    }
+    ret parserTokens[state.position - 1]
+) [end]
+
+# Check if current token matches keyword
+Fn match "state, keyword" (
+    let token = call peek state [end]
+    if token.type == TokKeyword && token.lexeme == keyword {
+        ret true
+    }
+    ret false
+) [end]
+
+# Match [end] token
+Fn matchEnd "state" (
+    let token = call peek state [end]
+    if token.type == TokEnd {
+        call advance state [end]
+        ret true
+    }
+    ret false
+) [end]
+
+# Parse error
+Fn parseError "state, message" (
+    let token = call peek state [end]
+    Print "[Parser Error] Line " [end]
+    Print token.line [end]
+    Print ":" [end]
+    Print token.column [end]
+    Print " - " [end]
+    Print message [end]
+) [end]
+
+# Parse primary expression
+Fn parsePrimary "state" (
+    let token = call peek state [end]
+    
+    # Number literal
+    if token.type == TokNumber {
+        call advance state [end]
+        let node = struct ASTNode {
+            nodeType = NodeNumber
+            value = token.lexeme
+            line = token.line
+            column = token.column
+        } [end]
+        ret node
+    }
+    
+    # String literal
+    if token.type == TokString {
+        call advance state [end]
+        let node = struct ASTNode {
+            nodeType = NodeString
+            value = token.lexeme
+            line = token.line
+            column = token.column
+        } [end]
+        ret node
+    }
+    
+    # Identifier
+    if token.type == TokIdentifier {
+        call advance state [end]
+        let node = struct ASTNode {
+            nodeType = NodeIdentifier
+            value = token.lexeme
+            line = token.line
+            column = token.column
+        } [end]
+        ret node
+    }
+    
+    # Boolean literals
+    if token.type == TokKeyword {
+        if token.lexeme == "true" || token.lexeme == "false" {
+            call advance state [end]
+            let node = struct ASTNode {
+                nodeType = NodeBool
+                value = token.lexeme
+                line = token.line
+                column = token.column
+            } [end]
+            ret node
+        }
+    }
+    
+    # Parenthesized expression
+    if token.type == TokOperator && token.lexeme == "(" {
+        call advance state [end]
+        let expr = call parseExpression state [end]
+        
+        let closeParen = call peek state [end]
+        if closeParen.type == TokOperator && closeParen.lexeme == ")" {
+            call advance state [end]
+        } else {
+            call parseError state "Expected ')'" [end]
+        }
+        
+        ret expr
+    }
+    
+    # Standard library function calls
+    if token.type == TokKeyword {
+        # Check if it's a stdlib function
+        if token.lexeme == "sqrt" || token.lexeme == "sin" || 
+           token.lexeme == "cos" || token.lexeme == "abs" ||
+           token.lexeme == "length" || token.lexeme == "upper" {
+            call advance state [end]
+            
+            let arg = call parsePrimary state [end]
+            
+            let node = struct ASTNode {
+                nodeType = NodeCall
+                value = token.lexeme
+                line = token.line
+                column = token.column
+            } [end]
+            
+            ret node
+        }
+    }
+    
+    call parseError state "Unexpected token in expression" [end]
+    call advance state [end]
+    
+    let errorNode = struct ASTNode {
+        nodeType = NodeIdentifier
+        value = "error"
+        line = token.line
+        column = token.column
+    } [end]
+    
+    ret errorNode
+) [end]
+
+# Parse binary operation
+Fn parseBinaryOp "state, lhs, precedence" (
+    let token = call peek state [end]
+    
+    if token.type == TokOperator {
+        let op = token.lexeme
+        
+        # Check operator precedence
+        let opPrec = 0
+        
+        if op == "*" || op == "/" || op == "%" {
+            mutate opPrec 3 [end]
+        } else {
+            if op == "+" || op == "-" {
+                mutate opPrec 2 [end]
+            } else {
+                if op == "<" || op == ">" || op == "<=" || op == ">=" {
+                    mutate opPrec 1 [end]
+                } else {
+                    if op == "==" || op == "!=" {
+                        mutate opPrec 1 [end]
+                    }
+                }
+            }
+        }
+        
+        if opPrec >= precedence {
+            call advance state [end]
+            
+            let rhs = call parsePrimary state [end]
+            
+            let node = struct ASTNode {
+                nodeType = NodeBinaryOp
+                value = op
+                line = token.line
+                column = token.column
+            } [end]
+            
+            ret node
+        }
+    }
+    
+    ret lhs
+) [end]
+
+# Parse expression
+Fn parseExpression "state" (
+    let expr = call parsePrimary state [end]
+    
+    # Check for binary operations
+    while !call parserAtEnd state [end] {
+        let token = call peek state [end]
+        
+        if token.type == TokOperator {
+            if token.lexeme == "+" || token.lexeme == "-" ||
+               token.lexeme == "*" || token.lexeme == "/" ||
+               token.lexeme == "%" ||
+               token.lexeme == "==" || token.lexeme == "!=" ||
+               token.lexeme == "<" || token.lexeme == ">" ||
+               token.lexeme == "<=" || token.lexeme == ">=" {
+                mutate expr call parseBinaryOp state expr 0 [end]
+            } else {
+                break [end]
+            }
+        } else {
+            break [end]
+        }
+    }
+    
+    ret expr
+) [end]
+
+# Parse Print statement
+Fn parsePrint "state" (
+    let token = call advance state [end]  # Skip 'Print'
+    
+    let expr = call parseExpression state [end]
+    
+    if !call matchEnd state [end] {
+        call parseError state "Expected [end] after Print statement" [end]
+    }
+    
+    let node = struct ASTNode {
+        nodeType = NodePrint
+        value = ""
+        line = token.line
+        column = token.column
+    } [end]
+    
+    ret node
+) [end]
+
+# Parse let statement
+Fn parseLet "state" (
+    let token = call advance state [end]  # Skip 'let'
+    
+    let nameToken = call peek state [end]
+    if nameToken.type != TokIdentifier {
+        call parseError state "Expected identifier after 'let'" [end]
+    }
+    call advance state [end]
+    
+    let eqToken = call peek state [end]
+    if eqToken.type != TokOperator || eqToken.lexeme != "=" {
+        call parseError state "Expected '=' after variable name" [end]
+    }
+    call advance state [end]
+    
+    let expr = call parseExpression state [end]
+    
+    if !call matchEnd state [end] {
+        call parseError state "Expected [end] after let statement" [end]
+    }
+    
+    let node = struct ASTNode {
+        nodeType = NodeLet
+        value = nameToken.lexeme
+        line = token.line
+        column = token.column
+    } [end]
+    
+    ret node
+) [end]
+
+# Parse function definition
+Fn parseFunction "state" (
+    let token = call advance state [end]  # Skip 'Fn'
+    
+    let nameToken = call peek state [end]
+    if nameToken.type != TokIdentifier {
+        call parseError state "Expected function name" [end]
+    }
+    call advance state [end]
+    
+    # Skip parameters (simplified)
+    let paramToken = call peek state [end]
+    if paramToken.type == TokString {
+        call advance state [end]
+    }
+    
+    # Skip opening parenthesis
+    let openParen = call peek state [end]
+    if openParen.type == TokOperator && openParen.lexeme == "(" {
+        call advance state [end]
+    }
+    
+    # Parse body (simplified - just skip until we find matching ')')
+    let depth = 1
+    while !call parserAtEnd state [end] && depth > 0 {
+        let tok = call peek state [end]
+        if tok.type == TokOperator {
+            if tok.lexeme == "(" {
+                mutate depth depth + 1 [end]
+            } else {
+                if tok.lexeme == ")" {
+                    mutate depth depth - 1 [end]
+                }
+            }
+        }
+        call advance state [end]
+    }
+    
+    if !call matchEnd state [end] {
+        call parseError state "Expected [end] after function" [end]
+    }
+    
+    let node = struct ASTNode {
+        nodeType = NodeFunction
+        value = nameToken.lexeme
+        line = token.line
+        column = token.column
+    } [end]
+    
+    ret node
+) [end]
+
+# Parse if statement
+Fn parseIf "state" (
+    let token = call advance state [end]  # Skip 'if'
+    
+    let condition = call parseExpression state [end]
+    
+    # Skip opening brace
+    let openBrace = call peek state [end]
+    if openBrace.type == TokOperator && openBrace.lexeme == "{" {
+        call advance state [end]
+    }
+    
+    # Parse body (simplified)
+    let depth = 1
+    while !call parserAtEnd state [end] && depth > 0 {
+        let tok = call peek state [end]
+        if tok.type == TokOperator {
+            if tok.lexeme == "{" {
+                mutate depth depth + 1 [end]
+            } else {
+                if tok.lexeme == "}" {
+                    mutate depth depth - 1 [end]
+                }
+            }
+        }
+        call advance state [end]
+    }
+    
+    # Check for else
+    if call match state "else" [end] {
+        call advance state [end]
+        
+        let elseBrace = call peek state [end]
+        if elseBrace.type == TokOperator && elseBrace.lexeme == "{" {
+            call advance state [end]
+        }
+        
+        mutate depth 1 [end]
+        while !call parserAtEnd state [end] && depth > 0 {
+            let tok = call peek state [end]
+            if tok.type == TokOperator {
+                if tok.lexeme == "{" {
+                    mutate depth depth + 1 [end]
+                } else {
+                    if tok.lexeme == "}" {
+                        mutate depth depth - 1 [end]
+                    }
+                }
+            }
+            call advance state [end]
+        }
+    }
+    
+    if !call matchEnd state [end] {
+        call parseError state "Expected [end] after if statement" [end]
+    }
+    
+    let node = struct ASTNode {
+        nodeType = NodeIf
+        value = ""
+        line = token.line
+        column = token.column
+    } [end]
+    
+    ret node
+) [end]
+
+# Parse while statement
+Fn parseWhile "state" (
+    let token = call advance state [end]  # Skip 'while'
+    
+    let condition = call parseExpression state [end]
+    
+    # Skip opening brace
+    let openBrace = call peek state [end]
+    if openBrace.type == TokOperator && openBrace.lexeme == "{" {
+        call advance state [end]
+    }
+    
+    # Parse body (simplified)
+    let depth = 1
+    while !call parserAtEnd state [end] && depth > 0 {
+        let tok = call peek state [end]
+        if tok.type == TokOperator {
+            if tok.lexeme == "{" {
+                mutate depth depth + 1 [end]
+            } else {
+                if tok.lexeme == "}" {
+                    mutate depth depth - 1 [end]
+                }
+            }
+        }
+        call advance state [end]
+    }
+    
+    let node = struct ASTNode {
+        nodeType = NodeWhile
+        value = ""
+        line = token.line
+        column = token.column
+    } [end]
+    
+    ret node
+) [end]
+
+# Parse statement
+Fn parseStatement "state" (
+    if call parserAtEnd state [end] {
+        let errorNode = struct ASTNode {
+            nodeType = NodeIdentifier
+            value = "eof"
+            line = 0
+            column = 0
+        } [end]
+        ret errorNode
+    }
+    
+    let token = call peek state [end]
+    
+    if token.type == TokKeyword {
+        if token.lexeme == "Print" {
+            ret call parsePrint state [end]
+        } else {
+            if token.lexeme == "let" {
+                ret call parseLet state [end]
+            } else {
+                if token.lexeme == "Fn" {
+                    ret call parseFunction state [end]
+                } else {
+                    if token.lexeme == "if" {
+                        ret call parseIf state [end]
+                    } else {
+                        if token.lexeme == "while" {
+                            ret call parseWhile state [end]
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    # Unknown statement, skip to next [end]
+    call parseError state "Unknown statement" [end]
+    
+    while !call parserAtEnd state [end] {
+        if call matchEnd state [end] {
+            break [end]
+        }
+        call advance state [end]
+    }
+    
+    let errorNode = struct ASTNode {
+        nodeType = NodeIdentifier
+        value = "error"
+        line = token.line
+        column = token.column
+    } [end]
+    
+    ret errorNode
+) [end]
+
+# Parse program (list of statements)
+Fn parseProgram "state" (
+    let statements = [] [end]
+    
+    while !call parserAtEnd state [end] {
+        let stmt = call parseStatement state [end]
+        push statements stmt [end]
+    }
+    
+    let program = struct ASTNode {
+        nodeType = NodeProgram
+        value = ""
+        line = 1
+        column = 1
+    } [end]
+    
+    ret program
+) [end]
+
+# Parse tokens into AST
+Fn parse "tokens" (
+    let state = call initParser tokens [end]
+    let ast = call parseProgram state [end]
+    ret ast
+) [end]
+
+Print "Parser module loaded" [end]
