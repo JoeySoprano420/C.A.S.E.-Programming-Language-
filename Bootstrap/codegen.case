@@ -1,0 +1,243 @@
+# ============================================================================
+# C.A.S.E. Self-Hosted Compiler - Code Generator Module
+# ============================================================================
+# This module generates C++ code from the AST
+
+# Code generator state
+struct CodeGenState {
+    string output
+    int indentLevel
+} [end]
+
+# Initialize code generator
+Fn initCodeGen "" (
+    let state = struct CodeGenState {
+        output = ""
+        indentLevel = 0
+    } [end]
+    ret state
+) [end]
+
+# Emit code
+Fn emit "state, code" (
+    mutate state.output concat state.output code [end]
+) [end]
+
+# Emit line
+Fn emitLine "state, code" (
+    call emit state code [end]
+    call emit state "\n" [end]
+) [end]
+
+# Emit indented line
+Fn emitIndented "state, code" (
+    let i = 0
+    while i < state.indentLevel {
+        call emit state "    " [end]
+        mutate i i + 1 [end]
+    }
+    call emit state code [end]
+    call emit state "\n" [end]
+) [end]
+
+# Increase indent
+Fn indent "state" (
+    mutate state.indentLevel state.indentLevel + 1 [end]
+) [end]
+
+# Decrease indent
+Fn dedent "state" (
+    if state.indentLevel > 0 {
+        mutate state.indentLevel state.indentLevel - 1 [end]
+    }
+) [end]
+
+# Emit C++ headers
+Fn emitHeaders "state" (
+    call emitLine state "#include <iostream>" [end]
+    call emitLine state "#include <string>" [end]
+    call emitLine state "#include <vector>" [end]
+    call emitLine state "#include <cmath>" [end]
+    call emitLine state "#include <algorithm>" [end]
+    call emitLine state "#include <fstream>" [end]
+    call emitLine state "" [end]
+    call emitLine state "using namespace std;" [end]
+    call emitLine state "" [end]
+) [end]
+
+# Generate expression code
+Fn generateExpression "state, node" (
+    if node.nodeType == NodeNumber {
+        call emit state node.value [end]
+    } else {
+        if node.nodeType == NodeString {
+            call emit state node.value [end]
+        } else {
+            if node.nodeType == NodeIdentifier {
+                call emit state node.value [end]
+            } else {
+                if node.nodeType == NodeBool {
+                    call emit state node.value [end]
+                } else {
+                    if node.nodeType == NodeBinaryOp {
+                        call emit state "(" [end]
+                        call emit state "lhs" [end]  # Simplified
+                        call emit state " " [end]
+                        call emit state node.value [end]
+                        call emit state " " [end]
+                        call emit state "rhs" [end]  # Simplified
+                        call emit state ")" [end]
+                    } else {
+                        if node.nodeType == NodeCall {
+                            # Function call
+                            if node.value == "sqrt" {
+                                call emit state "std::sqrt(" [end]
+                                call emit state "arg" [end]  # Simplified
+                                call emit state ")" [end]
+                            } else {
+                                if node.value == "sin" {
+                                    call emit state "std::sin(" [end]
+                                    call emit state "arg" [end]
+                                    call emit state ")" [end]
+                                } else {
+                                    if node.value == "cos" {
+                                        call emit state "std::cos(" [end]
+                                        call emit state "arg" [end]
+                                        call emit state ")" [end]
+                                    } else {
+                                        if node.value == "abs" {
+                                            call emit state "std::abs(" [end]
+                                            call emit state "arg" [end]
+                                            call emit state ")" [end]
+                                        } else {
+                                            if node.value == "length" {
+                                                call emit state "arg.length()" [end]
+                                            } else {
+                                                if node.value == "upper" {
+                                                    call emit state "std::toupper(arg)" [end]
+                                                } else {
+                                                    # Generic function call
+                                                    call emit state node.value [end]
+                                                    call emit state "()" [end]
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+) [end]
+
+# Generate Print statement
+Fn generatePrint "state, node" (
+    call emitIndented state "std::cout << " [end]
+    call emit state "expr" [end]  # Simplified - would use actual expression
+    call emit state " << std::endl;" [end]
+) [end]
+
+# Generate let statement
+Fn generateLet "state, node" (
+    call emitIndented state "auto " [end]
+    call emit state node.value [end]
+    call emit state " = " [end]
+    call emit state "expr" [end]  # Simplified
+    call emit state ";" [end]
+) [end]
+
+# Generate function definition
+Fn generateFunction "state, node" (
+    call emitLine state "" [end]
+    call emitIndented state "auto " [end]
+    call emit state node.value [end]
+    call emit state "(auto params)" [end]  # Simplified
+    call emitLine state " {" [end]
+    
+    call indent state [end]
+    call emitIndented state "// Function body" [end]
+    call emitIndented state "return 0;" [end]
+    call dedent state [end]
+    
+    call emitIndented state "}" [end]
+) [end]
+
+# Generate if statement
+Fn generateIf "state, node" (
+    call emitIndented state "if (condition) {" [end]
+    call indent state [end]
+    call emitIndented state "// Then branch" [end]
+    call dedent state [end]
+    call emitIndented state "}" [end]
+) [end]
+
+# Generate while statement
+Fn generateWhile "state, node" (
+    call emitIndented state "while (condition) {" [end]
+    call indent state [end]
+    call emitIndented state "// Loop body" [end]
+    call dedent state [end]
+    call emitIndented state "}" [end]
+) [end]
+
+# Generate statement
+Fn generateStatement "state, node" (
+    if node.nodeType == NodePrint {
+        call generatePrint state node [end]
+    } else {
+        if node.nodeType == NodeLet {
+            call generateLet state node [end]
+        } else {
+            if node.nodeType == NodeFunction {
+                call generateFunction state node [end]
+            } else {
+                if node.nodeType == NodeIf {
+                    call generateIf state node [end]
+                } else {
+                    if node.nodeType == NodeWhile {
+                        call generateWhile state node [end]
+                    }
+                }
+            }
+        }
+    }
+) [end]
+
+# Generate main function
+Fn generateMain "state, statements" (
+    call emitLine state "int main() {" [end]
+    call indent state [end]
+    
+    # Generate statements
+    let i = 0
+    while i < size statements [end] {
+        let stmt = statements[i]
+        call generateStatement state stmt [end]
+        mutate i i + 1 [end]
+    }
+    
+    call emitIndented state "return 0;" [end]
+    call dedent state [end]
+    call emitLine state "}" [end]
+) [end]
+
+# Generate C++ code from AST
+Fn generateCode "ast, statements" (
+    let state = call initCodeGen [end]
+    
+    # Emit headers
+    call emitHeaders state [end]
+    
+    # Generate global declarations and functions
+    # (simplified - just generate main)
+    
+    # Generate main function
+    call generateMain state statements [end]
+    
+    ret state.output
+) [end]
+
+Print "Code generator module loaded" [end]
