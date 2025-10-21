@@ -944,7 +944,7 @@ checkpoint myState [end]    # Save state
 # Restore if needed
 ```
 
-### 8. CIAM (Code Intelligence & Assisted Macros)
+### 8. CIAM [CONTEXTUAL.INFERENCE.ABSTRACTION.MACROs] 
 
 CIAM is C.A.S.E.'s unique AI-powered preprocessing layer that provides intelligent code transformation and assistance.
 
