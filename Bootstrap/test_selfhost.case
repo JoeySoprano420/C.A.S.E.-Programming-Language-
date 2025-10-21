@@ -1,0 +1,64 @@
+# C.A.S.E. Self-Hosted Compiler - Test Program
+
+Print "=== C.A.S.E. Self-Hosted Compiler Test ===" [end]
+Print "" [end]
+
+# Simple program to test the self-hosted compiler
+Print "Hello from a self-hosted compiler!" [end]
+Print "This program was compiled by a compiler written in C.A.S.E." [end]
+Print "" [end]
+
+# Variables
+let message = "Testing variable declaration" [end]
+let x = 42 [end]
+let pi = 3.14159 [end]
+
+Print "Variables:" [end]
+Print message [end]
+Print x [end]
+Print pi [end]
+Print "" [end]
+
+# Simple function
+Fn greet "name" (
+    Print "Hello, " [end]
+    Print name [end]
+    Print "!" [end]
+) [end]
+
+Print "Function call:" [end]
+call greet "World" [end]
+Print "" [end]
+
+# Math function
+Fn add "a, b" (
+    ret a + b
+) [end]
+
+Print "Math function:" [end]
+let sum = call add 10 5 [end]
+Print "10 + 5 = " [end]
+Print sum [end]
+Print "" [end]
+
+# Control flow
+Print "Control flow:" [end]
+let count = 0
+while count < 3 {
+    Print "Count: " [end]
+    Print count [end]
+    mutate count count + 1 [end]
+}
+Print "" [end]
+
+# Conditional
+Print "Conditional:" [end]
+if x > 40 {
+    Print "x is greater than 40" [end]
+} else {
+    Print "x is less than or equal to 40" [end]
+} [end]
+Print "" [end]
+
+Print "=== Test Complete ===" [end]
+Print "The self-hosted compiler successfully compiled this program!" [end]
