@@ -1,0 +1,441 @@
+# ============================================================================
+# C.A.S.E. Self-Hosted Compiler - Lexer Module
+# ============================================================================
+# This module handles tokenization of C.A.S.E. source code
+
+# Token types enumeration
+enum TokenType {
+    TokKeyword,
+    TokIdentifier,
+    TokNumber,
+    TokString,
+    TokOperator,
+    TokSymbol,
+    TokComment,
+    TokEnd,
+    TokEOF,
+    TokUnknown
+} [end]
+
+# Token structure
+struct Token {
+    int type
+    string lexeme
+    int line
+    int column
+} [end]
+
+# Lexer state
+struct LexerState {
+    string source
+    int position
+    int line
+    int column
+    int length
+} [end]
+
+# Keywords array (all 98+ keywords)
+let keywords = [
+    "Print", "Fn", "call", "let", "ret", "if", "else", "while", "loop",
+    "break", "continue", "switch", "case", "default", "struct",
+    "enum", "union", "typedef",
+    "open", "write", "writeln", "read", "close", "input",
+    "serialize", "deserialize", "compress", "decompress",
+    "sanitize_mem", "san_mem", "sanitize_code", "san_code",
+    "ping", "audit", "temperature", "pressure", "gauge", "matrix",
+    "mutate", "scale", "bounds", "checkpoint",
+    "thread", "async", "channel", "send", "recv",
+    "sync", "parallel", "batch", "schedule",
+    "window", "draw", "render", "color", "event", "widget", "layout",
+    "connect", "query", "insert", "update", "delete", "transaction",
+    "http", "socket", "websocket", "listen", "sendnet", "receive",
+    "sin", "cos", "tan", "sqrt", "pow", "abs",
+    "floor", "ceil", "round", "min", "max", "random",
+    "length", "substr", "concat", "split", "join",
+    "upper", "lower", "trim", "replace", "find",
+    "push", "pop", "shift", "unshift", "slice",
+    "map", "filter", "reduce", "sort", "reverse", "size"
+] [end]
+
+# Initialize lexer
+Fn initLexer "source" (
+    # Create lexer state
+    let state = struct LexerState {
+        source = source
+        position = 0
+        line = 1
+        column = 1
+        length = length source [end]
+    } [end]
+    ret state
+) [end]
+
+# Check if at end of input
+Fn isAtEnd "state" (
+    ret state.position >= state.length
+) [end]
+
+# Peek current character
+Fn peekChar "state" (
+    if call isAtEnd state [end] {
+        ret "\0"
+    } [end]
+    ret substr state.source state.position 1 [end]
+) [end]
+
+# Advance to next character
+Fn advanceChar "state" (
+    let ch = call peekChar state [end]
+    mutate state.position state.position + 1 [end]
+    mutate state.column state.column + 1 [end]
+    
+    if ch == "\n" {
+        mutate state.line state.line + 1 [end]
+        mutate state.column 1 [end]
+    } [end]
+    
+    ret ch
+) [end]
+
+# Skip whitespace
+Fn skipWhitespace "state" (
+    while !call isAtEnd state [end] {
+        let ch = call peekChar state [end]
+        
+        if ch == " " || ch == "\t" || ch == "\n" || ch == "\r" {
+            call advanceChar state [end]
+        } else {
+            break [end]
+        }
+    }
+) [end]
+
+# Check if character is alpha
+Fn isAlpha "ch" (
+    ret (ch >= "a" && ch <= "z") || (ch >= "A" && ch <= "Z") || ch == "_"
+) [end]
+
+# Check if character is digit
+Fn isDigit "ch" (
+    ret ch >= "0" && ch <= "9"
+) [end]
+
+# Check if character is alphanumeric
+Fn isAlphaNum "ch" (
+    ret call isAlpha ch [end] || call isDigit ch [end]
+) [end]
+
+# Lex identifier or keyword
+Fn lexIdentifier "state" (
+    let start = state.position
+    let startLine = state.line
+    let startCol = state.column
+    
+    while !call isAtEnd state [end] {
+        let ch = call peekChar state [end]
+        if call isAlphaNum ch [end] {
+            call advanceChar state [end]
+        } else {
+            break [end]
+        }
+    }
+    
+    let lexeme = substr state.source start (state.position - start) [end]
+    
+    # Check if it's a keyword
+    let isKeyword = false
+    let i = 0
+    while i < size keywords [end] {
+        if lexeme == keywords[i] {
+            mutate isKeyword true [end]
+            break [end]
+        }
+        mutate i i + 1 [end]
+    }
+    
+    let token = struct Token {
+        type = if isKeyword { TokKeyword } else { TokIdentifier }
+        lexeme = lexeme
+        line = startLine
+        column = startCol
+    } [end]
+    
+    ret token
+) [end]
+
+# Lex number
+Fn lexNumber "state" (
+    let start = state.position
+    let startLine = state.line
+    let startCol = state.column
+    let hasDot = false
+    
+    while !call isAtEnd state [end] {
+        let ch = call peekChar state [end]
+        
+        if call isDigit ch [end] {
+            call advanceChar state [end]
+        } else {
+            if ch == "." && !hasDot {
+                mutate hasDot true [end]
+                call advanceChar state [end]
+            } else {
+                break [end]
+            }
+        }
+    }
+    
+    let lexeme = substr state.source start (state.position - start) [end]
+    
+    let token = struct Token {
+        type = TokNumber
+        lexeme = lexeme
+        line = startLine
+        column = startCol
+    } [end]
+    
+    ret token
+) [end]
+
+# Lex string
+Fn lexString "state" (
+    let start = state.position
+    let startLine = state.line
+    let startCol = state.column
+    
+    call advanceChar state [end]  # Skip opening quote
+    
+    while !call isAtEnd state [end] {
+        let ch = call peekChar state [end]
+        
+        if ch == "\"" {
+            call advanceChar state [end]  # Skip closing quote
+            break [end]
+        } else {
+            if ch == "\\" {
+                call advanceChar state [end]  # Skip escape char
+                if !call isAtEnd state [end] {
+                    call advanceChar state [end]  # Skip escaped char
+                }
+            } else {
+                call advanceChar state [end]
+            }
+        }
+    }
+    
+    let lexeme = substr state.source start (state.position - start) [end]
+    
+    let token = struct Token {
+        type = TokString
+        lexeme = lexeme
+        line = startLine
+        column = startCol
+    } [end]
+    
+    ret token
+) [end]
+
+# Lex comment
+Fn lexComment "state" (
+    let start = state.position
+    let startLine = state.line
+    let startCol = state.column
+    
+    while !call isAtEnd state [end] {
+        let ch = call peekChar state [end]
+        if ch == "\n" {
+            break [end]
+        }
+        call advanceChar state [end]
+    }
+    
+    let lexeme = substr state.source start (state.position - start) [end]
+    
+    let token = struct Token {
+        type = TokComment
+        lexeme = lexeme
+        line = startLine
+        column = startCol
+    } [end]
+    
+    ret token
+) [end]
+
+# Lex [end] token
+Fn lexEndToken "state" (
+    let startLine = state.line
+    let startCol = state.column
+    
+    # Skip '['
+    call advanceChar state [end]
+    
+    # Skip 'end'
+    call advanceChar state [end]
+    call advanceChar state [end]
+    call advanceChar state [end]
+    
+    # Skip ']'
+    call advanceChar state [end]
+    
+    let token = struct Token {
+        type = TokEnd
+        lexeme = "[end]"
+        line = startLine
+        column = startCol
+    } [end]
+    
+    ret token
+) [end]
+
+# Lex operator or symbol
+Fn lexOperator "state" (
+    let startLine = state.line
+    let startCol = state.column
+    let ch = call advanceChar state [end]
+    let lexeme = ch
+    
+    # Check for two-character operators
+    if !call isAtEnd state [end] {
+        let next = call peekChar state [end]
+        
+        if ch == "=" && next == "=" {
+            call advanceChar state [end]
+            mutate lexeme "==" [end]
+        } else {
+            if ch == "!" && next == "=" {
+                call advanceChar state [end]
+                mutate lexeme "!=" [end]
+            } else {
+                if ch == "<" && next == "=" {
+                    call advanceChar state [end]
+                    mutate lexeme "<=" [end]
+                } else {
+                    if ch == ">" && next == "=" {
+                        call advanceChar state [end]
+                        mutate lexeme ">=" [end]
+                    } else {
+                        if ch == "&" && next == "&" {
+                            call advanceChar state [end]
+                            mutate lexeme "&&" [end]
+                        } else {
+                            if ch == "|" && next == "|" {
+                                call advanceChar state [end]
+                                mutate lexeme "||" [end]
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    let token = struct Token {
+        type = TokOperator
+        lexeme = lexeme
+        line = startLine
+        column = startCol
+    } [end]
+    
+    ret token
+) [end]
+
+# Get next token
+Fn nextToken "state" (
+    call skipWhitespace state [end]
+    
+    if call isAtEnd state [end] {
+        let token = struct Token {
+            type = TokEOF
+            lexeme = ""
+            line = state.line
+            column = state.column
+        } [end]
+        ret token
+    }
+    
+    let ch = call peekChar state [end]
+    
+    # Check for [end] token
+    if ch == "[" {
+        let next = substr state.source (state.position + 1) 3 [end]
+        if next == "end" {
+            ret call lexEndToken state [end]
+        }
+    }
+    
+    # Check for comment
+    if ch == "#" {
+        ret call lexComment state [end]
+    }
+    
+    # Check for string
+    if ch == "\"" {
+        ret call lexString state [end]
+    }
+    
+    # Check for number
+    if call isDigit ch [end] {
+        ret call lexNumber state [end]
+    }
+    
+    # Check for identifier or keyword
+    if call isAlpha ch [end] {
+        ret call lexIdentifier state [end]
+    }
+    
+    # Check for operators and symbols
+    if ch == "+" || ch == "-" || ch == "*" || ch == "/" || ch == "%" ||
+       ch == "=" || ch == "!" || ch == "<" || ch == ">" ||
+       ch == "&" || ch == "|" ||
+       ch == "(" || ch == ")" || ch == "{" || ch == "}" ||
+       ch == "[" || ch == "]" || ch == "," || ch == "." {
+        ret call lexOperator state [end]
+    }
+    
+    # Unknown character
+    let token = struct Token {
+        type = TokUnknown
+        lexeme = ch
+        line = state.line
+        column = state.column
+    } [end]
+    
+    call advanceChar state [end]
+    ret token
+) [end]
+
+# Tokenize entire source
+Fn tokenize "source" (
+    let state = call initLexer source [end]
+    let tokens = [] [end]
+    
+    while !call isAtEnd state [end] {
+        let token = call nextToken state [end]
+        
+        # Skip comments
+        if token.type != TokComment {
+            push tokens token [end]
+        }
+        
+        if token.type == TokEOF {
+            break [end]
+        }
+    }
+    
+    ret tokens
+) [end]
+
+# Print token (for debugging)
+Fn printToken "token" (
+    Print "Token(" [end]
+    Print token.type [end]
+    Print ", '" [end]
+    Print token.lexeme [end]
+    Print "', " [end]
+    Print token.line [end]
+    Print ":" [end]
+    Print token.column [end]
+    Print ")" [end]
+) [end]
+
+Print "Lexer module loaded" [end]
