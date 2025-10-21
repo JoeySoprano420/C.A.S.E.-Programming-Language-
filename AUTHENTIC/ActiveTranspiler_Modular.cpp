@@ -22,8 +22,7 @@
 #include "Parser.hpp"
 #include "CodeEmitter.hpp"
 
-#include "intelligence.hpp"  // CIAM intelligence module
-#include "intelligence.cpp"  // CIAM preprocessor
+#include "intelligence.hpp"
 
 // -----------------------------------------------------------------------------
 // ENHANCED ERROR REPORTING
@@ -607,6 +606,20 @@ int main(int argc, char** argv) {
 #ifdef _MSC_VER
 #pragma execution_character_set("UTF-8")
 #endif
+
+
+#pragma once
+namespace ciam {
+    class Preprocessor {
+    public:
+        std::string Process(const std::string& src);
+    };
+}
+
+std::string ciam::Preprocessor::Process(const std::string& src) {
+        // ~700 lines of implementation
+        // ...
+    }
 
 
 
