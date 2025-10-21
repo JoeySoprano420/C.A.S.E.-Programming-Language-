@@ -1,5 +1,5 @@
 //=============================================================================
-//  🌌 Violet Aura Creations — CASE Programming Language Transpiler
+//  ?? Violet Aura Creations — CASE Programming Language Transpiler
 //  MODULAR ARCHITECTURE - Main Entry Point
 //=============================================================================
 
@@ -576,20 +576,25 @@ int main(int argc, char** argv) {
 
         std::ofstream out("compiler.cpp");
         out << cpp;
-        std::cout << "\n\033[1;32m✅ Generated compiler.cpp\033[0m\n";
+        std::cout << "\n\033[1;32m? Generated compiler.cpp\033[0m\n";
 
         // Compile generated C++ code
-        std::string compileCmd = "clang++ -std=c++20 -O3 compiler.cpp -o program.exe 2>&1";
+        std::string compileCmd = "clang++ -std=c++20 -O2 compiler.cpp -o program.exe 2>&1";
         int result = system(compileCmd.c_str());
-        if (result == 0) {
-            std::cout << "\033[1;32m✅ Compiled to program.exe\033[0m\n";
+     if (result == 0) {
+    std::cout << "\033[1;32m✅ Compiled to program.exe\033[0m\n";
+            
+   // Run the compiled program
+    std::cout << "\n\033[1;36m=== Running program.exe ===\033[0m\n\n";
+          system("program.exe");
+    std::cout << "\n\033[1;32m✅ Program executed\033[0m\n";
         } else {
-            std::cerr << "\033[1;33m⚠️  C++ compilation had warnings/errors\033[0m\n";
-            std::cerr << "Check compiler.cpp for details\n";
+        std::cerr << "\033[1;33m⚠️  C++ compilation had warnings/errors\033[0m\n";
+     std::cerr << "Check compiler.cpp for details\n";
         }
 
         errorReporter.printSummary();
-        return errorReporter.hasErrors() ? 1 : 0;
+   return errorReporter.hasErrors() ? 1 : 0;
     }
     catch (const std::exception& e) {
         std::cerr << "\033[1;31m[Fatal Error]\033[0m " << e.what() << "\n";
@@ -597,4 +602,9 @@ int main(int argc, char** argv) {
     }
 }
 
-#pragma execution_character_set(pop)
+#ifdef _MSC_VER
+#pragma execution_character_set("UTF-8")
+#endif
+
+
+
