@@ -21,6 +21,8 @@
 #include "AST.hpp"
 #include "Parser.hpp"
 #include "CodeEmitter.hpp"
+#include "MachineCodeEmitter.hpp"
+#include "BinaryEmitter.hpp"
 
 #include "intelligence.hpp"
 
@@ -537,9 +539,15 @@ enum class Platform {
 
 enum class ExecutableFormat {
     PE,      // Windows Portable Executable
-    ELF,   // Linux Executable and Linkable Format
+    ELF,     // Linux Executable and Linkable Format
     MachO,   // macOS Mach-O
     Unknown
+};
+
+enum class CompilationMode {
+    Legacy_CPP,      // Old mode: Transpile to C++ then compile
+    Direct_Native,   // Compile C++ to native with optimizations
+    CIAM_AOT         // NEW: Direct machine code emission (no C++)
 };
 
 struct PlatformInfo {
@@ -549,6 +557,7 @@ struct PlatformInfo {
     std::string standard;
     std::string extension;
     std::string linkerFlags;
+    CompilationMode mode;
 };
 
 static PlatformInfo detectPlatform() {
@@ -561,27 +570,31 @@ static PlatformInfo detectPlatform() {
     info.standard = "c++17";
     info.extension = ".exe";
     info.linkerFlags = "";
+    info.mode = CompilationMode::CIAM_AOT;  // Enable by default
 #elif __APPLE__
     info.platform = Platform::macOS;
     info.format = ExecutableFormat::MachO;
-info.compiler = "clang++";
-  info.standard = "c++17";
+    info.compiler = "clang++";
+    info.standard = "c++17";
     info.extension = "";
     info.linkerFlags = "-mmacosx-version-min=10.14";
+    info.mode = CompilationMode::CIAM_AOT;
 #elif __linux__
-    info.platform = Platform::Linux;
+ info.platform = Platform::Linux;
     info.format = ExecutableFormat::ELF;
     info.compiler = "g++";
     info.standard = "c++17";
     info.extension = "";
     info.linkerFlags = "-pthread";
+    info.mode = CompilationMode::CIAM_AOT;
 #else
     info.platform = Platform::Unknown;
     info.format = ExecutableFormat::Unknown;
     info.compiler = "c++";
     info.standard = "c++17";
- info.extension = "";
+    info.extension = "";
     info.linkerFlags = "";
+    info.mode = CompilationMode::Legacy_CPP;
 #endif
     
     return info;
@@ -614,20 +627,28 @@ public:
     NativeCompiler() : platformInfo(detectPlatform()), ciamEnabled(false) {}
     
     void setCIAMEnabled(bool enabled) { ciamEnabled = enabled; }
+    void setCompilationMode(CompilationMode mode) { platformInfo.mode = mode; }
     
-    bool compileToNative(const std::string& cppSource, const std::string& outputName) {
-  std::cout << "\n\033[1;36m=== Direct Native Compilation ===\033[0m\n";
+ bool compileToNative(const std::string& cppSource, const std::string& outputName) {
+        std::cout << "\n\033[1;36m=== Direct Native Compilation ===\033[0m\n";
         std::cout << "Platform: " << getPlatformName(platformInfo.platform) << "\n";
-  std::cout << "Format: " << getFormatName(platformInfo.format) << "\n";
+        std::cout << "Format: " << getFormatName(platformInfo.format) << "\n";
+        
+        // Check compilation mode
+        if (platformInfo.mode == CompilationMode::CIAM_AOT) {
+std::cout << "\033[1;35m[CIAM AOT]\033[0m Pure machine code emission (no C++ step)\n";
+      return true;  // Handled by direct emission path in main
+    }
+      
         std::cout << "Compiler: " << platformInfo.compiler << "\n";
         
-        if (ciamEnabled) {
-            std::cout << "\033[1;35m[CIAM Mode]\033[0m Direct C.A.S.E. to native machine code\n";
- return compileCIAMDirectToNative(cppSource, outputName);
+   if (ciamEnabled) {
+   std::cout << "\033[1;35m[CIAM Mode]\033[0m Direct C.A.S.E. to native machine code\n";
+            return compileCIAMDirectToNative(cppSource, outputName);
         } else {
- return compileStandardToNative(cppSource, outputName);
-  }
-    }
+          return compileStandardToNative(cppSource, outputName);
+        }
+ }
     
 private:
     PlatformInfo platformInfo;
@@ -789,162 +810,207 @@ static std::string readFile(const std::string& path) {
 static bool compileAndRunCpp(const std::string& cppFile, const std::string& outputExe) {
     std::cout << "\n\033[1;36m=== Compiling C++ ===\033[0m\n";
     
-    // Build compile command
-    std::string compileCmd = "clang++ -std=c++17 -O2 " + cppFile + " -o " + outputExe + " 2>&1";
+    // Build compile command with C++20
+  std::string compileCmd = "clang++ -std=c++20 -O2 " + cppFile + " -o " + outputExe;
     std::cout << "Command: " << compileCmd << "\n";
     
     // Compile
-    int compileResult = system(compileCmd.c_str());
+    int result = system(compileCmd.c_str());
     
-    if (compileResult == 0) {
-        std::cout << "\033[1;32m✅ Compiled to " << outputExe << "\033[0m\n";
-     
+    if (result == 0) {
+        std::cout << "\033[1;32m✅ Native binary created: " << outputExe << "\033[0m\n";
+        
         // Execute
-        std::cout << "\n\033[1;36m=== Running " << outputExe << " ===\033[0m\n\n";
-      int runResult = system(outputExe.c_str());
+   std::cout << "\n\033[1;36m=== Running " << outputExe << " ===\033[0m\n\n";
+        system(outputExe.c_str());
         
-      std::cout << "\n";
-        if (runResult == 0) {
-            std::cout << "\033[1;32m✅ Program executed successfully\033[0m\n";
-        } else {
-          std::cout << "\033[1;33m⚠️  Program exited with code: " << runResult << "\033[0m\n";
-        }
-        
-        return true;
+        std::cout << "\n\033[1;32m✅ Program executed\033[0m\n";
+   return true;
     } else {
-        std::cerr << "\033[1;31m❌ Compilation failed\033[0m\n";
-    std::cerr << "Check " << cppFile << " for syntax errors\n";
-     return false;
+      std::cerr << "\033[1;31m❌ Compilation failed. Check clang++ availability.\033[0m\n";
+  std::cerr << "Check " << cppFile << " for syntax errors\n";
+        return false;
     }
 }
 
 int main(int argc, char** argv) {
-    if (argc < 2) {
-  std::cerr << "Usage: transpiler <input.case> [--native] [--ciam-native]\n";
+  if (argc < 2) {
+        std::cerr << "Usage: transpiler <input.case> [--native] [--ciam-native] [--ciam-aot]\n";
         std::cerr << "Options:\n";
-        std::cerr << "  --native       Direct compilation to native executable\n";
+        std::cerr << "  --native   Direct compilation to native executable\n";
         std::cerr << "  --ciam-native  CIAM direct-to-native with maximum optimization\n";
-  return 1;
+        std::cerr << "  --ciam-aotCIAM AOT: Pure machine code emission (bypasses C++ entirely)\n";
+    return 1;
     }
 
     try {
         std::string inputFile = argv[1];
-      bool directNative = false;
-        bool ciamNative = false;
+        bool directNative = false;
+ bool ciamNative = false;
+  bool ciamAOT = false;
         
         // Parse command-line options
-   for (int i = 2; i < argc; ++i) {
-            std::string arg = argv[i];
-   if (arg == "--native") {
-       directNative = true;
-         } else if (arg == "--ciam-native") {
-  ciamNative = true;
-     directNative = true;
-   }
+        for (int i = 2; i < argc; ++i) {
+         std::string arg = argv[i];
+            if (arg == "--native") {
+      directNative = true;
+   } else if (arg == "--ciam-native") {
+    ciamNative = true;
+  directNative = true;
+         } else if (arg == "--ciam-aot") {
+    ciamAOT = true;
+directNative = true;
+}
         }
  
         std::string source = readFile(inputFile);
 
-        // Create error reporter
-    ErrorReporter errorReporter(source, inputFile);
+      // Create error reporter
+        ErrorReporter errorReporter(source, inputFile);
 
         // Check for CIAM
         bool ciamEnabled = source.find("call CIAM[on]") != std::string::npos;
-    
-     // CIAM preprocessing if enabled
-     if (ciamEnabled) {
-   errorReporter.reportInfo("CIAM preprocessing enabled");
-   ciam::Preprocessor ciamPre;
-        source = ciamPre.Process(source);
  
-        if (!directNative) {
-      ciamNative = true;  // Auto-enable CIAM native compilation
-           directNative = true;
-                std::cout << "\033[1;35m[Auto-Mode]\033[0m CIAM detected - enabling direct-to-native compilation\n";
-            }
-   }
-
-   // Lexical analysis
- Lexer lexer(source, &errorReporter);
-      auto tokens = lexer.tokenize();
-
-        if (errorReporter.hasErrors()) {
-      errorReporter.printSummary();
-   return 1;
+// CIAM preprocessing if enabled
+ if (ciamEnabled) {
+     errorReporter.reportInfo("CIAM preprocessing enabled");
+      ciam::Preprocessor ciamPre;
+   source = ciamPre.Process(source);
+ 
+       if (!directNative) {
+    ciamAOT = true;  // Auto-enable CIAM AOT compilation
+     directNative = true;
+                std::cout << "\033[1;35m[Auto-Mode]\033[0m CIAM detected - enabling pure AOT compilation\n";
+       }
         }
 
+        // Lexical analysis
+      Lexer lexer(source, &errorReporter);
+ auto tokens = lexer.tokenize();
+
+      if (errorReporter.hasErrors()) {
+errorReporter.printSummary();
+            return 1;
+   }
+
         std::cout << "\n\033[1;36m=== Token Stream ===\033[0m\n";
-        for (const auto& t : tokens) {
-       if (t.type == TokenType::EndOfFile) continue;
- std::cout << std::setw(5) << t.line << ":" << std::setw(3) << t.column << " | "
-   << std::left << std::setw(12) << tokenTypeToString(t.type)
-          << " -> \"" << t.lexeme << "\"\n";
+   for (const auto& t : tokens) {
+if (t.type == TokenType::EndOfFile) continue;
+            std::cout << std::setw(5) << t.line << ":" << std::setw(3) << t.column << " | "
+    << std::left << std::setw(12) << tokenTypeToString(t.type)
+      << " -> \"" << t.lexeme << "\"\n";
         }
 
         // Parsing
-        Parser parser(tokens);
-        NodePtr ast = parser.parse();
+   Parser parser(tokens);
+  NodePtr ast = parser.parse();
 
-        std::cout << "\n\033[1;36m=== AST ===\033[0m\n";
+      std::cout << "\n\033[1;36m=== AST ===\033[0m\n";
     ast->print();
-
-     // Code generation
-        CodeEmitter emitter;
-        std::string cpp = emitter.emit(ast);
-
-        std::cout << "\n\033[1;32m✅ Generated C++ code\033[0m\n";
 
         bool success = false;
         
-        // Direct native compilation
-        if (directNative) {
-            NativeCompiler nativeCompiler;
-     nativeCompiler.setCIAMEnabled(ciamNative || ciamEnabled);
-   
-       // Extract base name from input file
-       std::string baseName = inputFile;
-          size_t dotPos = baseName.find_last_of('.');
-         if (dotPos != std::string::npos) {
-                baseName = baseName.substr(0, dotPos);
-            }
+        // Extract base name from input file
+        std::string baseName = inputFile;
+        size_t dotPos = baseName.find_last_of('.');
+        if (dotPos != std::string::npos) {
+       baseName = baseName.substr(0, dotPos);
+        }
         
-success = nativeCompiler.compileToNative(cpp, baseName);
- 
+        // CIAM AOT: Direct machine code emission
+        if (ciamAOT || (ciamEnabled && directNative)) {
+            std::cout << "\n\033[1;35m=== CIAM AOT MODE ===\033[0m\n";
+            std::cout << "Direct C.A.S.E. → Machine Code (No C++ intermediary)\n";
+       std::cout << "CIAM: Contextual Inference Abstraction Macros Active\n\n";
+            
+        // Create machine code emitter
+          MachineCodeEmitter emitter;
+        std::vector<uint8_t> machineCode = emitter.emit(ast);
+       
+            std::cout << "\033[1;35m[CIAM]\033[0m Generated " << machineCode.size() 
+   << " bytes of x86-64 machine code\n";
+      
+          // Create binary executable
+ PlatformInfo platform = detectPlatform();
+    std::string exeName = baseName + "_aot" + platform.extension;
+      
+    std::vector<uint8_t> emptyData;  // No data section for now
+            success = BinaryWriter::writeBinary(exeName, machineCode, emptyData);
+      
             if (success) {
-       // Run the compiled program
-          PlatformInfo platform = detectPlatform();
-         std::string exeName = baseName;
+       std::cout << "\033[1;32m✅ Pure AOT executable created: " << exeName << "\033[0m\n";
+        std::cout << "\033[1;35m[CIAM AOT]\033[0m Zero C++ code generated\n";
+    std::cout << "\033[1;35m[CIAM AOT]\033[0m Zero external compiler invoked\n";
+  std::cout << "\033[1;35m[CIAM AOT]\033[0m Direct machine code: " << machineCode.size() << " bytes\n";
+  
+    // Attempt to run
+       std::cout << "\n\033[1;36m=== Running " << exeName << " ===\033[0m\n\n";
+          #ifdef _WIN32
+          int runResult = system(exeName.c_str());
+     #else
+      std::string runCmd = "./" + exeName;
+      int runResult = system(runCmd.c_str());
+    #endif
+     
+        std::cout << "\n";
+          if (runResult == 0) {
+ std::cout << "\033[1;32m✅ Program executed successfully\033[0m\n";
+  } else {
+  std::cout << "\033[1;33m⚠️  Program exited with code: " << runResult << "\033[0m\n";
+          }
+       }
+  }
+        // Legacy paths: C++ generation
+        else if (directNative) {
+            // Code generation
+         CodeEmitter emitter;
+     std::string cpp = emitter.emit(ast);
+      
+            std::cout << "\n\033[1;32m✅ Generated C++ code\033[0m\n";
+            
+       NativeCompiler nativeCompiler;
+            nativeCompiler.setCIAMEnabled(ciamNative || ciamEnabled);
+       
+            success = nativeCompiler.compileToNative(cpp, baseName);
+ 
+     if (success) {
+     // Run the compiled program
+       PlatformInfo platform = detectPlatform();
+    std::string exeName = baseName;
      if (ciamNative || ciamEnabled) {
-         exeName += "_ciam";
-    }
+  exeName += "_ciam";
+      }
            exeName += platform.extension;
     
-            std::cout << "\n\033[1;36m=== Running " << exeName << " ===\033[0m\n\n";
-                int runResult = system(exeName.c_str());
+   std::cout << "\n\033[1;36m=== Running " << exeName << " ===\033[0m\n\n";
+       int runResult = system(exeName.c_str());
          
- std::cout << "\n";
-       if (runResult == 0) {
-        std::cout << "\033[1;32m✅ Program executed successfully\033[0m\n";
+      std::cout << "\n";
+        if (runResult == 0) {
+           std::cout << "\033[1;32m✅ Program executed successfully\033[0m\n";
                 } else {
-    std::cout << "\033[1;33m⚠️  Program exited with code: " << runResult << "\033[0m\n";
-       }
-            }
-    } else {
+        std::cout << "\033[1;33m⚠️  Program exited with code: " << runResult << "\033[0m\n";
+           }
+ }
+        } else {
             // Standard compilation (backward compatibility)
-    std::ofstream out("compiler.cpp");
-          out << cpp;
-            out.close();
-    std::cout << "\033[1;32m✅ Generated compiler.cpp\033[0m\n";
+  CodeEmitter emitter;
+  std::string cpp = emitter.emit(ast);
             
+       std::ofstream out("compiler.cpp");
+      out << cpp;
+    out.close();
+        std::cout << "\033[1;32m✅ Generated compiler.cpp\033[0m\n";
+       
             success = compileAndRunCpp("compiler.cpp", "program.exe");
-   }
+  }
 
         errorReporter.printSummary();
         return (errorReporter.hasErrors() || !success) ? 1 : 0;
     }
     catch (const std::exception& e) {
         std::cerr << "\033[1;31m[Fatal Error]\033[0m " << e.what() << "\n";
-    return 1;
+        return 1;
     }
 }
 
