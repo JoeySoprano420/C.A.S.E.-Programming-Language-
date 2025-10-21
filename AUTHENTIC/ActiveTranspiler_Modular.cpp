@@ -21,7 +21,9 @@
 #include "AST.hpp"
 #include "Parser.hpp"
 #include "CodeEmitter.hpp"
-#include "intelligence_clean.hpp"  // CIAM preprocessor
+
+#include "intelligence.hpp"  // CIAM intelligence module
+#include "intelligence.cpp"  // CIAM preprocessor
 
 // -----------------------------------------------------------------------------
 // ENHANCED ERROR REPORTING
