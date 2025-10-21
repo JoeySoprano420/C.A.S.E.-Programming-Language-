@@ -125,23 +125,23 @@ private:
         }
 
         size_t start = lineStarts[line - 1];
-        size_t end = (line < static_cast<int>(lineStarts.size())) 
-                     ? lineStarts[line] - 1 
-                     : source.size();
+        size_t end = (line < static_cast<int>(lineStarts.size()))
+            ? lineStarts[line] - 1
+            : source.size();
 
         // Extract the line
         std::string lineText = source.substr(start, end - start);
-        
+
         // Build context with pointer
         std::ostringstream context;
         context << lineText << "\n";
-        
+
         // Add pointer to error column
         for (int i = 1; i < col; ++i) {
             context << " ";
         }
         context << "\033[1;31m^\033[0m";
-        
+
         return context.str();
     }
 
@@ -149,35 +149,35 @@ private:
         // Color codes
         std::string levelColor;
         std::string levelName;
-        
+
         switch (err.level) {
-            case ErrorLevel::Info:
-                levelColor = "\033[1;36m";
-                levelName = "Info";
-                break;
-            case ErrorLevel::Warning:
-                levelColor = "\033[1;33m";
-                levelName = "Warning";
-                break;
-            case ErrorLevel::Error:
-                levelColor = "\033[1;31m";
-                levelName = "Error";
-                break;
-            case ErrorLevel::Fatal:
-                levelColor = "\033[1;35m";
-                levelName = "Fatal";
-                break;
+        case ErrorLevel::Info:
+            levelColor = "\033[1;36m";
+            levelName = "Info";
+            break;
+        case ErrorLevel::Warning:
+            levelColor = "\033[1;33m";
+            levelName = "Warning";
+            break;
+        case ErrorLevel::Error:
+            levelColor = "\033[1;31m";
+            levelName = "Error";
+            break;
+        case ErrorLevel::Fatal:
+            levelColor = "\033[1;35m";
+            levelName = "Fatal";
+            break;
         }
 
         std::cerr << "\n" << levelColor << "[" << levelName << "]\033[0m ";
         std::cerr << err.filename << ":" << err.line << ":" << err.column << "\n";
         std::cerr << "  " << err.message << "\n";
-        
+
         if (!err.context.empty()) {
             std::cerr << "\n";
             std::cerr << std::setw(5) << err.line << " | " << err.context << "\n";
         }
-        
+
         if (!err.suggestion.empty()) {
             std::cerr << "\n\033[1;32m[Suggestion]\033[0m " << err.suggestion << "\n";
         }
@@ -226,12 +226,14 @@ struct SymbolInfo {
 
     SymbolInfo()
         : kind(SymbolKind::Variable), line(0), column(0),
-        isInitialized(false), isUsed(false), scopeLevel(0) {}
+        isInitialized(false), isUsed(false), scopeLevel(0) {
+    }
 
     SymbolInfo(const std::string& n, const std::string& t, SymbolKind k,
         int l = 0, int c = 0, int scope = 0)
         : name(n), type(t), kind(k), line(l), column(c),
-        isInitialized(false), isUsed(false), scopeLevel(scope) {}
+        isInitialized(false), isUsed(false), scopeLevel(scope) {
+    }
 };
 
 class SymbolTable {
@@ -334,7 +336,8 @@ private:
 class Lexer {
 public:
     explicit Lexer(const std::string& src, ErrorReporter* reporter = nullptr)
-        : source(src), pos(0), line(1), column(1), errorReporter(reporter) {}
+        : source(src), pos(0), line(1), column(1), errorReporter(reporter) {
+    }
 
     std::vector<Token> tokenize() {
         std::vector<Token> tokens;
@@ -472,7 +475,8 @@ private:
         }
         if (peek() == '"') {
             advance();
-        } else {
+        }
+        else {
             reportError("Unterminated string literal", '\0');
         }
         return { TokenType::String, value, line, (int)startCol };
@@ -498,22 +502,24 @@ private:
         if (c != '\0') {
             fullMsg += " ('" + std::string(1, c) + "')";
         }
-        
+
         if (errorReporter) {
             std::string suggestion;
-            
+
             // Provide helpful suggestions
             if (msg.find("Unterminated") != std::string::npos) {
                 suggestion = "Add a closing quote (\") to complete the string literal";
-            } else if (msg.find("Unexpected character") != std::string::npos) {
+            }
+            else if (msg.find("Unexpected character") != std::string::npos) {
                 suggestion = "This character is not valid C.A.S.E. syntax. Check for typos.";
             }
-            
+
             errorReporter->reportError(fullMsg, line, column, suggestion);
-        } else {
+        }
+        else {
             // Fallback if no reporter
             std::cerr << "\033[1;31m[Lexer Error]\033[0m Line " << line
-                      << ", Col " << column << ": " << fullMsg << "\n";
+                << ", Col " << column << ": " << fullMsg << "\n";
         }
     }
 };
@@ -528,6 +534,38 @@ static std::string readFile(const std::string& path) {
     return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
 }
 
+static bool compileAndRunCpp(const std::string& cppFile, const std::string& outputExe) {
+    std::cout << "\n\033[1;36m=== Compiling C++ ===\033[0m\n";
+    
+    // Build compile command
+    std::string compileCmd = "clang++ -std=c++17 -O2 " + cppFile + " -o " + outputExe + " 2>&1";
+  std::cout << "Command: " << compileCmd << "\n";
+    
+    // Compile
+    int compileResult = system(compileCmd.c_str());
+    
+    if (compileResult == 0) {
+        std::cout << "\033[1;32m✅ Compiled to " << outputExe << "\033[0m\n";
+        
+        // Execute
+   std::cout << "\n\033[1;36m=== Running " << outputExe << " ===\033[0m\n\n";
+  int runResult = system(outputExe.c_str());
+        
+  std::cout << "\n";
+        if (runResult == 0) {
+            std::cout << "\033[1;32m✅ Program executed successfully\033[0m\n";
+     } else {
+std::cout << "\033[1;33m⚠️  Program exited with code: " << runResult << "\033[0m\n";
+        }
+        
+    return true;
+    } else {
+        std::cerr << "\033[1;31m❌ Compilation failed\033[0m\n";
+        std::cerr << "Check " << cppFile << " for syntax errors\n";
+        return false;
+    }
+}
+
 int main(int argc, char** argv) {
     if (argc < 2) {
         std::cerr << "Usage: transpiler <input.case>\n";
@@ -536,66 +574,55 @@ int main(int argc, char** argv) {
 
     try {
         std::string source = readFile(argv[1]);
-        
+
         // Create error reporter
         ErrorReporter errorReporter(source, argv[1]);
-        
+
         // CIAM preprocessing if enabled
         if (source.find("call CIAM[on]") != std::string::npos) {
-            errorReporter.reportInfo("CIAM preprocessing enabled");
-            ciam::Preprocessor ciamPre;
+       errorReporter.reportInfo("CIAM preprocessing enabled");
+  ciam::Preprocessor ciamPre;
             source = ciamPre.Process(source);
         }
 
-        // Lexical analysis
+  // Lexical analysis
         Lexer lexer(source, &errorReporter);
         auto tokens = lexer.tokenize();
 
-        if (errorReporter.hasErrors()) {
+ if (errorReporter.hasErrors()) {
             errorReporter.printSummary();
-            return 1;
-        }
+  return 1;
+    }
 
         std::cout << "\n\033[1;36m=== Token Stream ===\033[0m\n";
-        for (const auto& t : tokens) {
-            if (t.type == TokenType::EndOfFile) continue;
+  for (const auto& t : tokens) {
+      if (t.type == TokenType::EndOfFile) continue;
             std::cout << std::setw(5) << t.line << ":" << std::setw(3) << t.column << " | "
-                << std::left << std::setw(12) << tokenTypeToString(t.type)
-                << " -> \"" << t.lexeme << "\"\n";
+          << std::left << std::setw(12) << tokenTypeToString(t.type)
+       << " -> \"" << t.lexeme << "\"\n";
         }
 
         // Parsing
-        Parser parser(tokens);
+Parser parser(tokens);
         NodePtr ast = parser.parse();
 
         std::cout << "\n\033[1;36m=== AST ===\033[0m\n";
         ast->print();
 
-        // Code generation
+   // Code generation
         CodeEmitter emitter;
         std::string cpp = emitter.emit(ast);
 
         std::ofstream out("compiler.cpp");
-        out << cpp;
-        std::cout << "\n\033[1;32m? Generated compiler.cpp\033[0m\n";
+      out << cpp;
+        out.close();
+        std::cout << "\n\033[1;32m✅ Generated compiler.cpp\033[0m\n";
 
-        // Compile generated C++ code
-        std::string compileCmd = "clang++ -std=c++20 -O2 compiler.cpp -o program.exe 2>&1";
-        int result = system(compileCmd.c_str());
-     if (result == 0) {
-    std::cout << "\033[1;32m✅ Compiled to program.exe\033[0m\n";
-            
-   // Run the compiled program
-    std::cout << "\n\033[1;36m=== Running program.exe ===\033[0m\n\n";
-          system("program.exe");
-    std::cout << "\n\033[1;32m✅ Program executed\033[0m\n";
-        } else {
-        std::cerr << "\033[1;33m⚠️  C++ compilation had warnings/errors\033[0m\n";
-     std::cerr << "Check compiler.cpp for details\n";
-        }
+   // Automated compilation and execution
+        bool success = compileAndRunCpp("compiler.cpp", "program.exe");
 
         errorReporter.printSummary();
-   return errorReporter.hasErrors() ? 1 : 0;
+        return (errorReporter.hasErrors() || !success) ? 1 : 0;
     }
     catch (const std::exception& e) {
         std::cerr << "\033[1;31m[Fatal Error]\033[0m " << e.what() << "\n";
