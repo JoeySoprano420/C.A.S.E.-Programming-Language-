@@ -607,19 +607,8 @@ int main(int argc, char** argv) {
 #pragma execution_character_set("UTF-8")
 #endif
 
-
+#ifdef _MSC_VER
 #pragma once
-namespace ciam {
-    class Preprocessor {
-    public:
-        std::string Process(const std::string& src);
-    };
-}
-
-std::string ciam::Preprocessor::Process(const std::string& src) {
-        // ~700 lines of implementation
-        // ...
-    }
-
+#endif
 
 
