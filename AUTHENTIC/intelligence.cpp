@@ -1,5 +1,5 @@
 //=============================================================================
-//  🌌 Violet Aura Creations — CIAM Preprocessor Implementation
+//  ?? Violet Aura Creations — CIAM Preprocessor Implementation
 //=============================================================================
 
 #include "intelligence.hpp"
@@ -612,7 +612,7 @@ namespace ciam {
             toks.insert(toks.begin() + static_cast<std::ptrdiff_t>(head), defs.begin(), defs.end());
         }
 
-        // 10) Correct near-miss call targets using learned Fn names (edit distance ≤ 2)
+        // 10) Correct near-miss call targets using learned Fn names (edit distance ? 2)
         if (!fnNames.empty()) {
             for (const auto& co : callOccs) {
                 if (co.idxName >= toks.size() || toks[co.idxName].kind != K::Word) continue;
