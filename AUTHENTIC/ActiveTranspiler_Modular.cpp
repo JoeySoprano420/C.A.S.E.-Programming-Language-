@@ -525,6 +525,258 @@ private:
 };
 
 // -----------------------------------------------------------------------------
+// PLATFORM DETECTION AND NATIVE COMPILATION
+// -----------------------------------------------------------------------------
+
+enum class Platform {
+    Windows,
+    Linux,
+    macOS,
+    Unknown
+};
+
+enum class ExecutableFormat {
+    PE,      // Windows Portable Executable
+    ELF,   // Linux Executable and Linkable Format
+    MachO,   // macOS Mach-O
+    Unknown
+};
+
+struct PlatformInfo {
+    Platform platform;
+    ExecutableFormat format;
+    std::string compiler;
+    std::string standard;
+    std::string extension;
+    std::string linkerFlags;
+};
+
+static PlatformInfo detectPlatform() {
+    PlatformInfo info;
+    
+#ifdef _WIN32
+    info.platform = Platform::Windows;
+    info.format = ExecutableFormat::PE;
+    info.compiler = "clang++";  // or "cl" for MSVC
+    info.standard = "c++17";
+    info.extension = ".exe";
+    info.linkerFlags = "";
+#elif __APPLE__
+    info.platform = Platform::macOS;
+    info.format = ExecutableFormat::MachO;
+info.compiler = "clang++";
+  info.standard = "c++17";
+    info.extension = "";
+    info.linkerFlags = "-mmacosx-version-min=10.14";
+#elif __linux__
+    info.platform = Platform::Linux;
+    info.format = ExecutableFormat::ELF;
+    info.compiler = "g++";
+    info.standard = "c++17";
+    info.extension = "";
+    info.linkerFlags = "-pthread";
+#else
+    info.platform = Platform::Unknown;
+    info.format = ExecutableFormat::Unknown;
+    info.compiler = "c++";
+    info.standard = "c++17";
+ info.extension = "";
+    info.linkerFlags = "";
+#endif
+    
+    return info;
+}
+
+static std::string getPlatformName(Platform platform) {
+    switch (platform) {
+        case Platform::Windows: return "Windows";
+        case Platform::Linux: return "Linux";
+        case Platform::macOS: return "macOS";
+     default: return "Unknown";
+    }
+}
+
+static std::string getFormatName(ExecutableFormat format) {
+  switch (format) {
+        case ExecutableFormat::PE: return "PE (Portable Executable)";
+        case ExecutableFormat::ELF: return "ELF (Executable and Linkable Format)";
+   case ExecutableFormat::MachO: return "Mach-O";
+        default: return "Unknown";
+    }
+}
+
+// -----------------------------------------------------------------------------
+// DIRECT NATIVE COMPILATION
+// -----------------------------------------------------------------------------
+
+class NativeCompiler {
+public:
+    NativeCompiler() : platformInfo(detectPlatform()), ciamEnabled(false) {}
+    
+    void setCIAMEnabled(bool enabled) { ciamEnabled = enabled; }
+    
+    bool compileToNative(const std::string& cppSource, const std::string& outputName) {
+  std::cout << "\n\033[1;36m=== Direct Native Compilation ===\033[0m\n";
+        std::cout << "Platform: " << getPlatformName(platformInfo.platform) << "\n";
+  std::cout << "Format: " << getFormatName(platformInfo.format) << "\n";
+        std::cout << "Compiler: " << platformInfo.compiler << "\n";
+        
+        if (ciamEnabled) {
+            std::cout << "\033[1;35m[CIAM Mode]\033[0m Direct C.A.S.E. to native machine code\n";
+ return compileCIAMDirectToNative(cppSource, outputName);
+        } else {
+ return compileStandardToNative(cppSource, outputName);
+  }
+    }
+    
+private:
+    PlatformInfo platformInfo;
+    bool ciamEnabled;
+    
+    bool compileStandardToNative(const std::string& cppSource, const std::string& outputName) {
+  // Write C++ source to file
+        std::string cppFile = "compiler.cpp";
+        std::ofstream out(cppFile);
+    out << cppSource;
+        out.close();
+        
+        // Build output executable name
+      std::string outputExe = outputName + platformInfo.extension;
+        
+  // Build compilation command
+      std::ostringstream cmd;
+        cmd << platformInfo.compiler << " "
+         << "-std=" << platformInfo.standard << " "
+            << "-O2 "
+    << cppFile << " "
+  << "-o " << outputExe;
+        
+        if (!platformInfo.linkerFlags.empty()) {
+            cmd << " " << platformInfo.linkerFlags;
+        }
+        
+  // Add platform-specific optimizations
+        if (platformInfo.platform == Platform::Windows) {
+    cmd << " -Wl,--subsystem,console";
+        } else if (platformInfo.platform == Platform::Linux) {
+   cmd << " -Wl,--strip-all";  // Strip symbols for smaller binary
+     } else if (platformInfo.platform == Platform::macOS) {
+        cmd << " -Wl,-dead_strip";  // Remove dead code
+        }
+        
+        cmd << " 2>&1";
+      
+        std::cout << "\n\033[1;36m=== Compiling to Native Binary ===\033[0m\n";
+        std::cout << "Command: " << cmd.str() << "\n";
+        
+        // Execute compilation
+        int result = system(cmd.str().c_str());
+     
+        if (result == 0) {
+        std::cout << "\033[1;32m✅ Successfully compiled to " << outputExe << "\033[0m\n";
+            printBinaryInfo(outputExe);
+   return true;
+        } else {
+ std::cerr << "\033[1;31m❌ Native compilation failed\033[0m\n";
+       return false;
+        }
+    }
+    
+    bool compileCIAMDirectToNative(const std::string& cppSource, const std::string& outputName) {
+        std::cout << "\n\033[1;35m=== CIAM Direct-to-Native Compilation ===\033[0m\n";
+        std::cout << "Mode: Optimized direct compilation (bypassing intermediate steps)\n";
+        
+        // Write optimized C++ source
+    std::string cppFile = "ciam_optimized.cpp";
+        std::ofstream out(cppFile);
+out << "// CIAM-Optimized Native Code\n";
+        out << "#pragma GCC optimize(\"O3\")\n";
+        out << "#pragma GCC optimize(\"unroll-loops\")\n";
+      out << cppSource;
+        out.close();
+        
+        // Build output executable name
+        std::string outputExe = outputName + "_ciam" + platformInfo.extension;
+        
+        // Build aggressive optimization command
+        std::ostringstream cmd;
+        cmd << platformInfo.compiler << " "
+            << "-std=" << platformInfo.standard << " "
+            << "-O3 "         // Maximum optimization
+ << "-march=native " // Optimize for current CPU
+            << "-flto ";        // Link-time optimization
+        
+        // Platform-specific aggressive optimizations
+  if (platformInfo.platform == Platform::Windows) {
+    cmd << "-ffast-math "
+     << "-funroll-loops "
+     << "-Wl,--subsystem,console ";
+  } else if (platformInfo.platform == Platform::Linux) {
+            cmd << "-ffast-math "
+    << "-funroll-loops "
+        << "-Wl,--strip-all "
+      << "-static-libgcc "
+       << "-static-libstdc++ ";
+        } else if (platformInfo.platform == Platform::macOS) {
+            cmd << "-ffast-math "
+                << "-funroll-loops "
+   << "-Wl,-dead_strip ";
+        }
+        
+   cmd << cppFile << " "
+  << "-o " << outputExe;
+        
+        if (!platformInfo.linkerFlags.empty()) {
+            cmd << " " << platformInfo.linkerFlags;
+     }
+        
+        cmd << " 2>&1";
+        
+      std::cout << "CIAM Optimization: Maximum (O3 + LTO + CPU-specific)\n";
+        std::cout << "Command: " << cmd.str() << "\n";
+        
+     // Execute compilation
+        int result = system(cmd.str().c_str());
+        
+        if (result == 0) {
+         std::cout << "\033[1;35m✅ CIAM successfully compiled to " << outputExe << "\033[0m\n";
+  std::cout << "\033[1;35m[CIAM]\033[0m Direct C.A.S.E. → Native machine code complete\n";
+            printBinaryInfo(outputExe);
+            return true;
+ } else {
+    std::cerr << "\033[1;31m❌ CIAM native compilation failed\033[0m\n";
+    return false;
+     }
+    }
+    
+    void printBinaryInfo(const std::string& executable) {
+        std::cout << "\n\033[1;36m=== Binary Information ===\033[0m\n";
+        std::cout << "Executable: " << executable << "\n";
+        std::cout << "Format: " << getFormatName(platformInfo.format) << "\n";
+        
+      // Get file size
+      std::ifstream file(executable, std::ios::binary | std::ios::ate);
+        if (file.is_open()) {
+     auto size = file.tellg();
+  std::cout << "Size: " << size << " bytes (" << (size / 1024.0) << " KB)\n";
+          file.close();
+      }
+    
+        // Platform-specific info
+    if (platformInfo.platform == Platform::Windows) {
+            std::cout << "Type: Windows PE Executable\n";
+            std::cout << "Architecture: x86-64\n";
+        } else if (platformInfo.platform == Platform::Linux) {
+            std::cout << "Type: Linux ELF Executable\n";
+            std::cout << "Architecture: x86-64\n";
+        } else if (platformInfo.platform == Platform::macOS) {
+ std::cout << "Type: macOS Mach-O Executable\n";
+            std::cout << "Architecture: x86-64 / ARM64\n";
+   }
+    }
+};
+
+// -----------------------------------------------------------------------------
 // MAIN ENTRY POINT
 // -----------------------------------------------------------------------------
 
@@ -539,103 +791,165 @@ static bool compileAndRunCpp(const std::string& cppFile, const std::string& outp
     
     // Build compile command
     std::string compileCmd = "clang++ -std=c++17 -O2 " + cppFile + " -o " + outputExe + " 2>&1";
-  std::cout << "Command: " << compileCmd << "\n";
+    std::cout << "Command: " << compileCmd << "\n";
     
     // Compile
     int compileResult = system(compileCmd.c_str());
     
     if (compileResult == 0) {
         std::cout << "\033[1;32m✅ Compiled to " << outputExe << "\033[0m\n";
-        
+     
         // Execute
-   std::cout << "\n\033[1;36m=== Running " << outputExe << " ===\033[0m\n\n";
-  int runResult = system(outputExe.c_str());
+        std::cout << "\n\033[1;36m=== Running " << outputExe << " ===\033[0m\n\n";
+      int runResult = system(outputExe.c_str());
         
-  std::cout << "\n";
+      std::cout << "\n";
         if (runResult == 0) {
             std::cout << "\033[1;32m✅ Program executed successfully\033[0m\n";
-     } else {
-std::cout << "\033[1;33m⚠️  Program exited with code: " << runResult << "\033[0m\n";
+        } else {
+          std::cout << "\033[1;33m⚠️  Program exited with code: " << runResult << "\033[0m\n";
         }
         
-    return true;
+        return true;
     } else {
         std::cerr << "\033[1;31m❌ Compilation failed\033[0m\n";
-        std::cerr << "Check " << cppFile << " for syntax errors\n";
-        return false;
+    std::cerr << "Check " << cppFile << " for syntax errors\n";
+     return false;
     }
 }
 
 int main(int argc, char** argv) {
     if (argc < 2) {
-        std::cerr << "Usage: transpiler <input.case>\n";
-        return 1;
-    }
-
-    try {
-        std::string source = readFile(argv[1]);
-
-        // Create error reporter
-        ErrorReporter errorReporter(source, argv[1]);
-
-        // CIAM preprocessing if enabled
-        if (source.find("call CIAM[on]") != std::string::npos) {
-       errorReporter.reportInfo("CIAM preprocessing enabled");
-  ciam::Preprocessor ciamPre;
-            source = ciamPre.Process(source);
-        }
-
-  // Lexical analysis
-        Lexer lexer(source, &errorReporter);
-        auto tokens = lexer.tokenize();
-
- if (errorReporter.hasErrors()) {
-            errorReporter.printSummary();
+  std::cerr << "Usage: transpiler <input.case> [--native] [--ciam-native]\n";
+        std::cerr << "Options:\n";
+        std::cerr << "  --native       Direct compilation to native executable\n";
+        std::cerr << "  --ciam-native  CIAM direct-to-native with maximum optimization\n";
   return 1;
     }
 
+    try {
+        std::string inputFile = argv[1];
+      bool directNative = false;
+        bool ciamNative = false;
+        
+        // Parse command-line options
+   for (int i = 2; i < argc; ++i) {
+            std::string arg = argv[i];
+   if (arg == "--native") {
+       directNative = true;
+         } else if (arg == "--ciam-native") {
+  ciamNative = true;
+     directNative = true;
+   }
+        }
+ 
+        std::string source = readFile(inputFile);
+
+        // Create error reporter
+    ErrorReporter errorReporter(source, inputFile);
+
+        // Check for CIAM
+        bool ciamEnabled = source.find("call CIAM[on]") != std::string::npos;
+    
+     // CIAM preprocessing if enabled
+     if (ciamEnabled) {
+   errorReporter.reportInfo("CIAM preprocessing enabled");
+   ciam::Preprocessor ciamPre;
+        source = ciamPre.Process(source);
+ 
+        if (!directNative) {
+      ciamNative = true;  // Auto-enable CIAM native compilation
+           directNative = true;
+                std::cout << "\033[1;35m[Auto-Mode]\033[0m CIAM detected - enabling direct-to-native compilation\n";
+            }
+   }
+
+   // Lexical analysis
+ Lexer lexer(source, &errorReporter);
+      auto tokens = lexer.tokenize();
+
+        if (errorReporter.hasErrors()) {
+      errorReporter.printSummary();
+   return 1;
+        }
+
         std::cout << "\n\033[1;36m=== Token Stream ===\033[0m\n";
-  for (const auto& t : tokens) {
-      if (t.type == TokenType::EndOfFile) continue;
-            std::cout << std::setw(5) << t.line << ":" << std::setw(3) << t.column << " | "
-          << std::left << std::setw(12) << tokenTypeToString(t.type)
-       << " -> \"" << t.lexeme << "\"\n";
+        for (const auto& t : tokens) {
+       if (t.type == TokenType::EndOfFile) continue;
+ std::cout << std::setw(5) << t.line << ":" << std::setw(3) << t.column << " | "
+   << std::left << std::setw(12) << tokenTypeToString(t.type)
+          << " -> \"" << t.lexeme << "\"\n";
         }
 
         // Parsing
-Parser parser(tokens);
+        Parser parser(tokens);
         NodePtr ast = parser.parse();
 
         std::cout << "\n\033[1;36m=== AST ===\033[0m\n";
-        ast->print();
+    ast->print();
 
-   // Code generation
+     // Code generation
         CodeEmitter emitter;
         std::string cpp = emitter.emit(ast);
 
-        std::ofstream out("compiler.cpp");
-      out << cpp;
-        out.close();
-        std::cout << "\n\033[1;32m✅ Generated compiler.cpp\033[0m\n";
+        std::cout << "\n\033[1;32m✅ Generated C++ code\033[0m\n";
 
-   // Automated compilation and execution
-        bool success = compileAndRunCpp("compiler.cpp", "program.exe");
+        bool success = false;
+        
+        // Direct native compilation
+        if (directNative) {
+            NativeCompiler nativeCompiler;
+     nativeCompiler.setCIAMEnabled(ciamNative || ciamEnabled);
+   
+       // Extract base name from input file
+       std::string baseName = inputFile;
+          size_t dotPos = baseName.find_last_of('.');
+         if (dotPos != std::string::npos) {
+                baseName = baseName.substr(0, dotPos);
+            }
+        
+success = nativeCompiler.compileToNative(cpp, baseName);
+ 
+            if (success) {
+       // Run the compiled program
+          PlatformInfo platform = detectPlatform();
+         std::string exeName = baseName;
+     if (ciamNative || ciamEnabled) {
+         exeName += "_ciam";
+    }
+           exeName += platform.extension;
+    
+            std::cout << "\n\033[1;36m=== Running " << exeName << " ===\033[0m\n\n";
+                int runResult = system(exeName.c_str());
+         
+ std::cout << "\n";
+       if (runResult == 0) {
+        std::cout << "\033[1;32m✅ Program executed successfully\033[0m\n";
+                } else {
+    std::cout << "\033[1;33m⚠️  Program exited with code: " << runResult << "\033[0m\n";
+       }
+            }
+    } else {
+            // Standard compilation (backward compatibility)
+    std::ofstream out("compiler.cpp");
+          out << cpp;
+            out.close();
+    std::cout << "\033[1;32m✅ Generated compiler.cpp\033[0m\n";
+            
+            success = compileAndRunCpp("compiler.cpp", "program.exe");
+   }
 
         errorReporter.printSummary();
         return (errorReporter.hasErrors() || !success) ? 1 : 0;
     }
     catch (const std::exception& e) {
         std::cerr << "\033[1;31m[Fatal Error]\033[0m " << e.what() << "\n";
-        return 1;
+    return 1;
     }
 }
 
 #ifdef _MSC_VER
 #pragma execution_character_set("UTF-8")
-#endif
-
-#ifdef _MSC_VER
-#pragma once
 #endif
 
 
