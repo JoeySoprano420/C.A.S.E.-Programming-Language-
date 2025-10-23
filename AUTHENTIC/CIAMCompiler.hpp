@@ -1,6 +1,6 @@
 //=============================================================================
 //  Violet Aura Creations — CIAM AOT Compiler
-//  Complete Pipeline: CASE → CIAM → Optimizations → Native x86_64 → PE Executable
+//  Complete Pipeline: CASE ? CIAM ? Optimizations ? Native x86_64 ? PE Executable
 //=============================================================================
 
 #pragma once
@@ -24,11 +24,11 @@ namespace CIAM {
 class CIAMTransformer {
 public:
     // Transform AST to CIAM intermediate representation
-  NodePtr transformToCIAM(NodePtr ast);
+    NodePtr transformToCIAM(NodePtr ast);
     
 private:
     // CIAM macro expansions
-NodePtr expandCIAMMacro(NodePtr node);
+    NodePtr expandCIAMMacro(NodePtr node);
     NodePtr inferTypes(NodePtr node);
     NodePtr contextualizeOperations(NodePtr node);
 };
@@ -40,29 +40,51 @@ NodePtr expandCIAMMacro(NodePtr node);
 class AggressiveOptimizer {
 public:
     struct OptimizationConfig {
-     bool enableConstantFolding = true;
-     bool enableDeadCodeElimination = true;
-bool enableLoopUnrolling = true;
-     bool enablePeephole = true;
-  bool enableTailCall = true;
-        bool enableVectorization = true;
-        bool enableLookAhead = true;
-        bool enableBoundsCheckElim = true;
-      bool enableBranchChaining = true;
-  bool enableCurling = true;
-        bool enableSynchronizedScheduling = true;
-        bool enableFootprintCompression = true;
-        bool enableAdaptiveTuning = true;
-        bool enableProfileGuidedOpt = false;
-     int loopUnrollFactor = 8;
-        int lookAheadDepth = 5;
- int optimizationPasses = 3;
+   bool enableConstantFolding;
+        bool enableDeadCodeElimination;
+        bool enableLoopUnrolling;
+    bool enablePeephole;
+        bool enableTailCall;
+   bool enableVectorization;
+        bool enableLookAhead;
+        bool enableBoundsCheckElim;
+        bool enableBranchChaining;
+        bool enableCurling;
+  bool enableSynchronizedScheduling;
+        bool enableFootprintCompression;
+     bool enableAdaptiveTuning;
+        bool enableProfileGuidedOpt;
+     int loopUnrollFactor;
+        int lookAheadDepth;
+  int optimizationPasses;
+        
+      // Constructor with default values
+   OptimizationConfig()
+  : enableConstantFolding(true)
+     , enableDeadCodeElimination(true)
+     , enableLoopUnrolling(true)
+         , enablePeephole(true)
+ , enableTailCall(true)
+       , enableVectorization(true)
+  , enableLookAhead(true)
+ , enableBoundsCheckElim(true)
+            , enableBranchChaining(true)
+            , enableCurling(true)
+   , enableSynchronizedScheduling(true)
+    , enableFootprintCompression(true)
+            , enableAdaptiveTuning(true)
+ , enableProfileGuidedOpt(false)
+  , loopUnrollFactor(8)
+  , lookAheadDepth(5)
+       , optimizationPasses(3)
+ {}
     };
 
-    AggressiveOptimizer(const OptimizationConfig& config = OptimizationConfig())
- : config(config) {}
-  
-  NodePtr optimize(NodePtr node);
+    // Constructors
+    AggressiveOptimizer();
+    explicit AggressiveOptimizer(const OptimizationConfig& config);
+    
+    NodePtr optimize(NodePtr node);
     
     void printStatistics() const;
     
@@ -70,26 +92,37 @@ private:
     OptimizationConfig config;
     
     struct Stats {
-        int constantsFolded = 0;
-        int deadCodeEliminated = 0;
-        int loopsUnrolled = 0;
-        int peepholesApplied = 0;
-   int tailCallsOptimized = 0;
-        int vectorizationsApplied = 0;
-        int branchesChained = 0;
-        int footprintReduction = 0;
+   int constantsFolded;
+        int deadCodeEliminated;
+      int loopsUnrolled;
+        int peepholesApplied;
+  int tailCallsOptimized;
+      int vectorizationsApplied;
+      int branchesChained;
+        int footprintReduction;
+        
+        Stats()
+   : constantsFolded(0)
+            , deadCodeEliminated(0)
+ , loopsUnrolled(0)
+, peepholesApplied(0)
+            , tailCallsOptimized(0)
+            , vectorizationsApplied(0)
+, branchesChained(0)
+            , footprintReduction(0)
+      {}
     } stats;
     
     // Optimization passes
     NodePtr constantFolding(NodePtr node);
     NodePtr deadCodeElimination(NodePtr node);
     NodePtr loopUnrolling(NodePtr node);
-NodePtr peepholeOptimization(NodePtr node);
+    NodePtr peepholeOptimization(NodePtr node);
     NodePtr tailCallOptimization(NodePtr node);
     NodePtr vectorization(NodePtr node);
     NodePtr lookAheadOptimization(NodePtr node);
     NodePtr boundsCheckElimination(NodePtr node);
- NodePtr branchChaining(NodePtr node);
+    NodePtr branchChaining(NodePtr node);
     NodePtr curlingOptimization(NodePtr node);
     NodePtr synchronizedScheduling(NodePtr node);
     NodePtr footprintCompression(NodePtr node);
@@ -99,13 +132,13 @@ NodePtr peepholeOptimization(NodePtr node);
     bool isConstantExpr(NodePtr node);
     int64_t evaluateConstant(NodePtr node);
     bool canUnrollLoop(std::shared_ptr<LoopStmt> loop);
-    bool canVectorize(std::shared_ptr<LoopStmt> loop);
+ bool canVectorize(std::shared_ptr<LoopStmt> loop);
     bool isTailCall(std::shared_ptr<ReturnStmt> ret, const std::string& funcName);
     
     // Deductive reasoning
-    struct Fact {
+ struct Fact {
         std::string variable;
-   std::string relation; // "==", "<", ">", ">=", "<=", "!="
+        std::string relation; // "==", "<", ">", ">=", "<=", "!="
         int64_t value;
     };
     std::vector<Fact> knownFacts;
@@ -126,17 +159,26 @@ NodePtr peepholeOptimization(NodePtr node);
     std::unordered_map<std::string, int> hotPaths;
     std::unordered_map<std::string, int> loopCounts;
     
-    void identifyHotPaths(NodePtr node);
+  void identifyHotPaths(NodePtr node);
     bool isHotPath(const std::string& label);
     
- // Environment adaptation
+    // Environment adaptation
     struct EnvironmentInfo {
-        int cpuCores;
+    int cpuCores;
         size_t memoryMB;
- bool hasSIMD;
+        bool hasSIMD;
         bool hasAVX;
         bool hasAVX512;
         bool supportsThreading;
+        
+        EnvironmentInfo()
+   : cpuCores(1)
+            , memoryMB(1024)
+         , hasSIMD(false)
+            , hasAVX(false)
+    , hasAVX512(false)
+        , supportsThreading(false)
+  {}
     } environment;
     
     void detectEnvironment();
@@ -150,19 +192,27 @@ NodePtr peepholeOptimization(NodePtr node);
 class AOTCompiler {
 public:
     struct CompilationOptions {
-        std::string outputFilename = "output.exe";
-        bool generateDebugInfo = false;
-   bool verbose = true;
-    int optimizationLevel = 3; // 0=none, 1=basic, 2=aggressive, 3=ultra
-        std::string targetPlatform = "windows-x64"; // "windows-x64", "linux-x64", "macos-x64"
-     
+   std::string outputFilename;
+        bool generateDebugInfo;
+        bool verbose;
+        int optimizationLevel; // 0=none, 1=basic, 2=aggressive, 3=ultra
+        std::string targetPlatform; // "windows-x64", "linux-x64", "macos-x64"
+        
         AggressiveOptimizer::OptimizationConfig optimizerConfig;
+    
+   // Constructor with default values
+        CompilationOptions()
+ : outputFilename("output.exe")
+            , generateDebugInfo(false)
+       , verbose(true)
+, optimizationLevel(3)
+      , targetPlatform("windows-x64")
+        {}
     };
     
-    AOTCompiler(const CompilationOptions& options = CompilationOptions())
-      : options(options), optimizer(options.optimizerConfig) {
-        detectPlatform();
-  }
+    // Constructors
+    AOTCompiler();
+    explicit AOTCompiler(const CompilationOptions& options);
     
     // Main compilation entry point
     bool compile(NodePtr ast);
@@ -182,22 +232,35 @@ private:
     std::unique_ptr<MachineCodeEmitter> codeEmitter;
     
     struct CompilationStats {
-    size_t originalASTNodes = 0;
-     size_t ciamNodes = 0;
- size_t optimizedNodes = 0;
-        size_t machineCodeBytes = 0;
-        size_t executableSize = 0;
-   double ciamTime = 0.0;
-      double optimizationTime = 0.0;
-        double codeGenTime = 0.0;
-        double linkTime = 0.0;
-      double totalTime = 0.0;
+size_t originalASTNodes;
+        size_t ciamNodes;
+        size_t optimizedNodes;
+        size_t machineCodeBytes;
+   size_t executableSize;
+     double ciamTime;
+        double optimizationTime;
+      double codeGenTime;
+        double linkTime;
+        double totalTime;
+   
+        CompilationStats()
+            : originalASTNodes(0)
+  , ciamNodes(0)
+          , optimizedNodes(0)
+     , machineCodeBytes(0)
+    , executableSize(0)
+            , ciamTime(0.0)
+          , optimizationTime(0.0)
+            , codeGenTime(0.0)
+, linkTime(0.0)
+  , totalTime(0.0)
+        {}
     } stats;
     
     void detectPlatform();
     void configureOptimizations();
     
-    // Platform-specific linking
+// Platform-specific linking
     bool linkWindows(const std::vector<uint8_t>& code);
     bool linkLinux(const std::vector<uint8_t>& code);
     bool linkMacOS(const std::vector<uint8_t>& code);
@@ -211,9 +274,9 @@ private:
     
     // Resource section (icons, manifests, etc.)
     std::vector<uint8_t> generateResourceSection();
-    
+ 
     // Relocation table
- std::vector<uint8_t> generateRelocationTable();
+    std::vector<uint8_t> generateRelocationTable();
     
     // Debug information (PDB for Windows, DWARF for Linux/macOS)
     bool generateDebugInfo(const std::string& filename);
@@ -224,7 +287,7 @@ private:
     
     // Utilities
     size_t countNodes(NodePtr node);
- double getCurrentTime();
+    double getCurrentTime();
     void log(const std::string& message, int level = 0);
 };
 
