@@ -36,10 +36,10 @@ struct OptimizationStats {
     // Tier 3 stats
     int pgoOptimizations;
     int ltoOptimizations;
-    int autofdo Samples;
+    int autofdoSamples;  // FIXED: removed space
     int adaptiveTunings;
     int base12Fusions;
-int temporalSyncs;
+    int temporalSyncs;
     int speculativeSchedules;
     
     OptimizationStats()
@@ -47,8 +47,8 @@ int temporalSyncs;
         , boundsChecksEliminated(0), branchesOptimized(0), footprintReduction(0)
       , loopsUnrolled(0), loopsFused(0), vectorizationsApplied(0)
      , lookaheadMerges(0), tailCallsEliminated(0)
-        , pgoOptimizations(0), ltoOptimizations(0), autofdo Samples(0)
-        , adaptiveTunings(0), base12Fusions(0), temporalSyncs(0)
+        , pgoOptimizations(0), ltoOptimizations(0), autofdoSamples(0)  // FIXED
+ , adaptiveTunings(0), base12Fusions(0), temporalSyncs(0)
     , speculativeSchedules(0)
     {}
     
